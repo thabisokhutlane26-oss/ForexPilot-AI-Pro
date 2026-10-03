@@ -6,7 +6,7 @@ public final class AppConfig {
         // Prevent creating this class
     }
 
-    public static String getOandaAccessToken() {
-        return BuildConfig.OANDA_ACCESS_TOKEN;
+    public static String getTwelveDataApiKey() {
+        return BuildConfig.TWELVE_DATA_API_KEY;
     }
 }
