@@ -60,6 +60,8 @@ public class MainActivity extends Activity {
     private String selectedMarket = "EUR/USD";
     private String selectedTimeframe = "15M";
 
+    private boolean lastForexOpen = false;
+
     private final String[] markets = {
             "XAU/USD",
             "EUR/USD",
@@ -942,6 +944,10 @@ public class MainActivity extends Activity {
                         now.getTime()
                 );
 
+        // =========================================================
+        // MARKET LOCK
+        // =========================================================
+
         if (forexStatusText != null) {
 
             if (forexOpen) {
@@ -990,6 +996,46 @@ public class MainActivity extends Activity {
             }
         }
 
+        if (scanButton != null) {
+
+            scanButton.setEnabled(
+                    forexOpen
+            );
+
+            if (forexOpen) {
+
+                scanButton.setAlpha(
+                        1.0f
+                );
+
+            } else {
+
+                scanButton.setAlpha(
+                        0.45f
+                );
+            }
+        }
+
+        // If the market has just closed, immediately remove
+        // any active signal and trade levels.
+        if (!forexOpen) {
+
+            showMarketClosedState();
+
+        } else if (!lastForexOpen) {
+
+            // Market has just opened again.
+            // Automatically resume scanning.
+            if (signalRepository != null) {
+                requestCurrentSignal();
+            }
+        }
+
+        lastForexOpen =
+                forexOpen;
+
+        // SESSION MONITOR
+
         updateSession(
                 sydneySessionText,
                 "SYDNEY",
@@ -1021,6 +1067,69 @@ public class MainActivity extends Activity {
                 8,
                 17
         );
+    }
+
+    private void showMarketClosedState() {
+
+        if (signalText != null) {
+
+            signalText.setText(
+                    "WAIT"
+            );
+
+            signalText.setTextColor(
+                    YELLOW
+            );
+        }
+
+        if (connectionStatus != null) {
+
+            connectionStatus.setText(
+                    "●  MARKET CLOSED • SIGNALS LOCKED"
+            );
+
+            connectionStatus.setTextColor(
+                    MUTED
+            );
+        }
+
+        if (priceText != null) {
+
+            priceText.setText(
+                    "PRICE  --"
+            );
+        }
+
+        if (trendText != null) {
+
+            trendText.setText(
+                    "TREND\nMARKET CLOSED"
+            );
+        }
+
+        if (rsiText != null) {
+
+            rsiText.setText(
+                    "RSI\n--"
+            );
+        }
+
+        if (atrText != null) {
+
+            atrText.setText(
+                    "ATR\n--"
+            );
+        }
+
+        if (momentumText != null) {
+
+            momentumText.setText(
+                    "TIMEFRAME\n"
+                            + selectedTimeframe
+            );
+        }
+
+        clearTradeLevels();
     }
 
     private boolean isForexMarketOpen(
@@ -1227,10 +1336,24 @@ public class MainActivity extends Activity {
                             ) {
 
                                 runOnUiThread(
-                                        () ->
-                                                updateDashboard(
-                                                        signal
-                                                )
+                                        () -> {
+
+                                            // IMPORTANT:
+                                            // Never accept a signal after
+                                            // the Forex market has closed.
+                                            if (!isForexMarketOpen(
+                                                    new Date()
+                                            )) {
+
+                                                showMarketClosedState();
+
+                                                return;
+                                            }
+
+                                            updateDashboard(
+                                                    signal
+                                            );
+                                        }
                                 );
                             }
 
@@ -1241,6 +1364,18 @@ public class MainActivity extends Activity {
 
                                 runOnUiThread(
                                         () -> {
+
+                                            // If the market closed while
+                                            // the request was running,
+                                            // keep the market lock active.
+                                            if (!isForexMarketOpen(
+                                                    new Date()
+                                            )) {
+
+                                                showMarketClosedState();
+
+                                                return;
+                                            }
 
                                             connectionStatus.setText(
                                                     "●  DATA ERROR • "
@@ -1287,12 +1422,33 @@ public class MainActivity extends Activity {
                         }
                 );
 
-        requestCurrentSignal();
+        // Only request data if the market is currently open.
+        if (isForexMarketOpen(
+                new Date()
+        )) {
+
+            requestCurrentSignal();
+
+        } else {
+
+            showMarketClosedState();
+        }
     }
 
     private void requestCurrentSignal() {
 
         if (signalRepository == null) {
+            return;
+        }
+
+        // HARD MARKET LOCK.
+        // This prevents manual scans while Forex is closed.
+        if (!isForexMarketOpen(
+                new Date()
+        )) {
+
+            showMarketClosedState();
+
             return;
         }
 
@@ -1343,6 +1499,17 @@ public class MainActivity extends Activity {
             marketName.setText(
                     selectedMarket
             );
+        }
+
+        // Keep the market lock active after changing
+        // market or timeframe.
+        if (!isForexMarketOpen(
+                new Date()
+        )) {
+
+            showMarketClosedState();
+
+            return;
         }
 
         if (priceText != null) {
@@ -1412,6 +1579,16 @@ public class MainActivity extends Activity {
     ) {
 
         if (signal == null) {
+            return;
+        }
+
+        // Final safety check.
+        if (!isForexMarketOpen(
+                new Date()
+        )) {
+
+            showMarketClosedState();
+
             return;
         }
 
