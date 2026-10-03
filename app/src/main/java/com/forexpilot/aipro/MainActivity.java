@@ -5,7 +5,6 @@ import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
-import android.os.Handler;
 import android.view.Gravity;
 import android.view.View;
 import android.widget.AdapterView;
@@ -17,10 +16,6 @@ import android.widget.ScrollView;
 import android.widget.Spinner;
 import android.widget.TextView;
 
-import java.time.Instant;
-import java.time.ZoneId;
-import java.time.ZonedDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.Locale;
 
 public class MainActivity extends Activity {
@@ -28,11 +23,6 @@ public class MainActivity extends Activity {
     private SignalRepository signalRepository;
 
     private TextView connectionStatus;
-    private TextView clockText;
-    private TextView dateText;
-    private TextView marketStatusText;
-    private TextView nextOpenText;
-
     private TextView marketName;
     private TextView priceText;
     private TextView signalText;
@@ -98,37 +88,11 @@ public class MainActivity extends Activity {
     private final int BLUE =
             Color.rgb(70, 150, 255);
 
-    private final Handler clockHandler =
-            new Handler();
-
-    private final Runnable clockRunnable =
-            new Runnable() {
-                @Override
-                public void run() {
-
-                    updateMarketClock();
-
-                    clockHandler.postDelayed(
-                            this,
-                            1000
-                    );
-                }
-            };
-
-    private boolean lastMarketOpenState = false;
-
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
         buildDashboard();
-
-        updateMarketClock();
-
-        clockHandler.post(
-                clockRunnable
-        );
-
         connectToMarketData();
     }
 
@@ -201,86 +165,26 @@ public class MainActivity extends Activity {
                 params(6)
         );
 
-        root.addView(
-                header,
-                params(0)
-        );
-
-        // LIVE CLOCK CARD
-
-        LinearLayout clockCard =
-                createCard();
-
-        clockText =
+        connectionStatus =
                 createText(
-                        "--:--:-- SAST",
-                        28,
-                        WHITE,
-                        true
-                );
-
-        clockText.setGravity(
-                Gravity.CENTER
-        );
-
-        clockCard.addView(
-                clockText
-        );
-
-        dateText =
-                createText(
-                        "LOADING DATE",
-                        12,
-                        MUTED,
-                        true
-                );
-
-        dateText.setGravity(
-                Gravity.CENTER
-        );
-
-        clockCard.addView(
-                dateText,
-                params(5)
-        );
-
-        marketStatusText =
-                createText(
-                        "●  CHECKING MARKET",
-                        16,
+                        "●  CONNECTING",
+                        13,
                         YELLOW,
                         true
                 );
 
-        marketStatusText.setGravity(
+        connectionStatus.setGravity(
                 Gravity.CENTER
         );
 
-        clockCard.addView(
-                marketStatusText,
-                params(12)
-        );
-
-        nextOpenText =
-                createText(
-                        "NEXT OPEN: --",
-                        11,
-                        MUTED,
-                        false
-                );
-
-        nextOpenText.setGravity(
-                Gravity.CENTER
-        );
-
-        clockCard.addView(
-                nextOpenText,
-                params(5)
+        header.addView(
+                connectionStatus,
+                params(14)
         );
 
         root.addView(
-                clockCard,
-                params(18)
+                header,
+                params(0)
         );
 
         // MARKET SELECTOR
@@ -327,7 +231,7 @@ public class MainActivity extends Activity {
 
         root.addView(
                 marketSelector,
-                params(14)
+                params(18)
         );
 
         // LIVE MARKET CARD
@@ -785,224 +689,6 @@ public class MainActivity extends Activity {
         );
     }
 
-    private void updateMarketClock() {
-
-        Instant now =
-                Instant.now();
-
-        boolean marketOpen =
-                MarketClock.isForexOpen(
-                        now
-                );
-
-        ZonedDateTime southAfricaTime =
-                now.atZone(
-                        ZoneId.of(
-                                "Africa/Johannesburg"
-                        )
-                );
-
-        String clock =
-                southAfricaTime.format(
-                        DateTimeFormatter.ofPattern(
-                                "HH:mm:ss"
-                        )
-                );
-
-        String date =
-                southAfricaTime.format(
-                        DateTimeFormatter.ofPattern(
-                                "EEEE • dd MMMM yyyy",
-                                Locale.ENGLISH
-                        )
-                );
-
-        if (clockText != null) {
-
-            clockText.setText(
-                    clock + " SAST"
-            );
-        }
-
-        if (dateText != null) {
-
-            dateText.setText(
-                    date.toUpperCase(
-                            Locale.ENGLISH
-                    )
-            );
-        }
-
-        if (marketStatusText != null) {
-
-            if (marketOpen) {
-
-                marketStatusText.setText(
-                        "●  FOREX MARKET OPEN"
-                );
-
-                marketStatusText.setTextColor(
-                        GREEN
-                );
-
-            } else {
-
-                marketStatusText.setText(
-                        "●  FOREX MARKET CLOSED"
-                );
-
-                marketStatusText.setTextColor(
-                        RED
-                );
-            }
-        }
-
-        if (nextOpenText != null) {
-
-            if (marketOpen) {
-
-                nextOpenText.setText(
-                        "SIGNAL SCANNER • ACTIVE"
-                );
-
-                nextOpenText.setTextColor(
-                        GREEN
-                );
-
-            } else {
-
-                ZonedDateTime nextOpen =
-                        MarketClock.getNextMarketOpen(
-                                now
-                        );
-
-                ZonedDateTime nextOpenSast =
-                        nextOpen.withZoneSameInstant(
-                                ZoneId.of(
-                                        "Africa/Johannesburg"
-                                )
-                        );
-
-                String nextOpenFormatted =
-                        nextOpenSast.format(
-                                DateTimeFormatter.ofPattern(
-                                        "EEE • dd MMM • HH:mm SAST",
-                                        Locale.ENGLISH
-                                )
-                        );
-
-                nextOpenText.setText(
-                        "NEXT MARKET OPEN • "
-                                + nextOpenFormatted
-                );
-
-                nextOpenText.setTextColor(
-                        MUTED
-                );
-            }
-        }
-
-        /*
-         * If the market has just changed from OPEN
-         * to CLOSED, immediately clear the dashboard
-         * so old signals cannot remain visible.
-         */
-        if (lastMarketOpenState
-                && !marketOpen) {
-
-            showMarketClosedState();
-        }
-
-        lastMarketOpenState =
-                marketOpen;
-
-        /*
-         * Disable scanning while the market is closed.
-         */
-        if (scanButton != null) {
-
-            scanButton.setEnabled(
-                    marketOpen
-            );
-
-            if (marketOpen) {
-
-                scanButton.setText(
-                        "SCAN MARKET"
-                );
-
-            } else {
-
-                scanButton.setText(
-                        "MARKET CLOSED"
-                );
-            }
-        }
-    }
-
-    private void showMarketClosedState() {
-
-        if (connectionStatus != null) {
-
-            connectionStatus.setText(
-                    "●  MARKET CLOSED • NO NEW SIGNALS"
-            );
-
-            connectionStatus.setTextColor(
-                    RED
-            );
-        }
-
-        if (signalText != null) {
-
-            signalText.setText(
-                    "MARKET CLOSED"
-            );
-
-            signalText.setTextColor(
-                    RED
-            );
-        }
-
-        if (priceText != null) {
-
-            priceText.setText(
-                    "PRICE  --"
-            );
-        }
-
-        if (trendText != null) {
-
-            trendText.setText(
-                    "TREND\n--"
-            );
-        }
-
-        if (rsiText != null) {
-
-            rsiText.setText(
-                    "RSI\n--"
-            );
-        }
-
-        if (atrText != null) {
-
-            atrText.setText(
-                    "ATR\n--"
-            );
-        }
-
-        if (momentumText != null) {
-
-            momentumText.setText(
-                    "TIMEFRAME\n"
-                            + selectedTimeframe
-            );
-        }
-
-        clearTradeLevels();
-    }
-
     private void connectToMarketData() {
 
         String apiKey =
@@ -1024,24 +710,10 @@ public class MainActivity extends Activity {
                             ) {
 
                                 runOnUiThread(
-                                        () -> {
-
-                                            /*
-                                             * Never display a signal
-                                             * while the market is closed.
-                                             */
-                                            if (!MarketClock.isForexOpen(
-                                                    Instant.now()
-                                            )) {
-
-                                                showMarketClosedState();
-                                                return;
-                                            }
-
-                                            updateDashboard(
-                                                    signal
-                                            );
-                                        }
+                                        () ->
+                                                updateDashboard(
+                                                        signal
+                                                )
                                 );
                             }
 
@@ -1052,14 +724,6 @@ public class MainActivity extends Activity {
 
                                 runOnUiThread(
                                         () -> {
-
-                                            if (!MarketClock.isForexOpen(
-                                                    Instant.now()
-                                            )) {
-
-                                                showMarketClosedState();
-                                                return;
-                                            }
 
                                             connectionStatus.setText(
                                                     "●  DATA ERROR • "
@@ -1115,19 +779,6 @@ public class MainActivity extends Activity {
             return;
         }
 
-        /*
-         * HARD SAFETY GATE:
-         * No signal request is sent while Forex
-         * is closed.
-         */
-        if (!MarketClock.isForexOpen(
-                Instant.now()
-        )) {
-
-            showMarketClosedState();
-            return;
-        }
-
         final String marketToScan =
                 selectedMarket;
 
@@ -1168,21 +819,18 @@ public class MainActivity extends Activity {
     private void resetForNewSelection() {
 
         if (marketName != null) {
-
             marketName.setText(
                     selectedMarket
             );
         }
 
         if (priceText != null) {
-
             priceText.setText(
                     "PRICE  --"
             );
         }
 
         if (signalText != null) {
-
             signalText.setText(
                     "WAIT"
             );
@@ -1193,28 +841,24 @@ public class MainActivity extends Activity {
         }
 
         if (trendText != null) {
-
             trendText.setText(
                     "TREND\n--"
             );
         }
 
         if (rsiText != null) {
-
             rsiText.setText(
                     "RSI\n--"
             );
         }
 
         if (atrText != null) {
-
             atrText.setText(
                     "ATR\n--"
             );
         }
 
         if (momentumText != null) {
-
             momentumText.setText(
                     "TIMEFRAME\n"
                             + selectedTimeframe
@@ -1223,16 +867,7 @@ public class MainActivity extends Activity {
 
         clearTradeLevels();
 
-        if (!MarketClock.isForexOpen(
-                Instant.now()
-        )) {
-
-            showMarketClosedState();
-            return;
-        }
-
         if (connectionStatus != null) {
-
             connectionStatus.setText(
                     "●  READY "
                             + selectedMarket
@@ -1255,25 +890,22 @@ public class MainActivity extends Activity {
         }
 
         /*
-         * Protect against an old response arriving
-         * after the user changed the selected pair.
+         * Ignore an old response if the user has
+         * already selected another market/timeframe.
          */
         if (!selectedMarket.equals(
                 signal.getSymbol()
         )) {
-
             return;
         }
 
         if (!selectedTimeframe.equals(
                 signal.getTimeframe()
         )) {
-
             return;
         }
 
         if (marketName != null) {
-
             marketName.setText(
                     signal.getSymbol()
             );
@@ -1440,35 +1072,30 @@ public class MainActivity extends Activity {
     private void clearTradeLevels() {
 
         if (entryText != null) {
-
             entryText.setText(
                     "ENTRY                         --"
             );
         }
 
         if (stopLossText != null) {
-
             stopLossText.setText(
                     "STOP LOSS                  --"
             );
         }
 
         if (tp1Text != null) {
-
             tp1Text.setText(
                     "TAKE PROFIT 1          --"
             );
         }
 
         if (tp2Text != null) {
-
             tp2Text.setText(
                     "TAKE PROFIT 2          --"
             );
         }
 
         if (tp3Text != null) {
-
             tp3Text.setText(
                     "TAKE PROFIT 3          --"
             );
@@ -1486,9 +1113,7 @@ public class MainActivity extends Activity {
             return "--";
         }
 
-        if ("USD/JPY".equalsIgnoreCase(
-                symbol
-        )) {
+        if ("USD/JPY".equalsIgnoreCase(symbol)) {
 
             return String.format(
                     Locale.US,
@@ -1497,9 +1122,7 @@ public class MainActivity extends Activity {
             );
         }
 
-        if ("XAU/USD".equalsIgnoreCase(
-                symbol
-        )) {
+        if ("XAU/USD".equalsIgnoreCase(symbol)) {
 
             return String.format(
                     Locale.US,
@@ -1822,10 +1445,6 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
-
-        clockHandler.removeCallbacks(
-                clockRunnable
-        );
 
         if (signalRepository != null) {
             signalRepository.stop();
