@@ -1,7 +1,5 @@
 package com.forexpilot.aipro;
 
-import java.util.List;
-
 public class SignalRepository {
 
     private final MarketDataManager marketDataManager;
@@ -17,8 +15,7 @@ public class SignalRepository {
             SignalCallback callback
     ) {
         this.callback = callback;
-
-        marketDataManager =
+        this.marketDataManager =
                 new MarketDataManager(provider);
     }
 
@@ -33,13 +30,13 @@ public class SignalRepository {
 
                     @Override
                     public void onCandlesReceived(
-                            List<Candle> candles
+                            java.util.List<Candle> candles
                     ) {
                         if (candles == null
-                                || candles.isEmpty()) {
+                                || candles.size() < 60) {
 
                             callback.onError(
-                                    "NO LIVE MARKET DATA"
+                                    "NOT ENOUGH LIVE CANDLE DATA"
                             );
                             return;
                         }
@@ -58,7 +55,7 @@ public class SignalRepository {
                     public void onPriceReceived(
                             double price
                     ) {
-                        // Live price handling will be added later.
+                        // Price updates can be used by the UI later.
                     }
 
                     @Override
