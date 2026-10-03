@@ -23,6 +23,7 @@ public class MainActivity extends Activity {
     private SignalRepository signalRepository;
 
     private TextView connectionStatus;
+    private TextView marketName;
     private TextView priceText;
     private TextView signalText;
     private TextView trendText;
@@ -38,7 +39,6 @@ public class MainActivity extends Activity {
 
     private Spinner marketSpinner;
     private Spinner timeframeSpinner;
-
     private Button scanButton;
 
     private String selectedMarket = "EUR/USD";
@@ -121,9 +121,7 @@ public class MainActivity extends Activity {
 
         scrollView.addView(root);
 
-        // -------------------------------------------------
         // HEADER
-        // -------------------------------------------------
 
         LinearLayout header =
                 new LinearLayout(this);
@@ -189,9 +187,7 @@ public class MainActivity extends Activity {
                 params(0)
         );
 
-        // -------------------------------------------------
-        // MARKET SELECTOR CARD
-        // -------------------------------------------------
+        // MARKET SELECTOR
 
         LinearLayout marketSelector =
                 createCard();
@@ -238,55 +234,7 @@ public class MainActivity extends Activity {
                 params(18)
         );
 
-        marketSpinner.setOnItemSelectedListener(
-                new AdapterView.OnItemSelectedListener() {
-
-                    @Override
-                    public void onItemSelected(
-                            AdapterView<?> parent,
-                            View view,
-                            int position,
-                            long id
-                    ) {
-
-                        selectedMarket =
-                                markets[position];
-                    }
-
-                    @Override
-                    public void onNothingSelected(
-                            AdapterView<?> parent
-                    ) {
-                    }
-                }
-        );
-
-        timeframeSpinner.setOnItemSelectedListener(
-                new AdapterView.OnItemSelectedListener() {
-
-                    @Override
-                    public void onItemSelected(
-                            AdapterView<?> parent,
-                            View view,
-                            int position,
-                            long id
-                    ) {
-
-                        selectedTimeframe =
-                                timeframes[position];
-                    }
-
-                    @Override
-                    public void onNothingSelected(
-                            AdapterView<?> parent
-                    ) {
-                    }
-                }
-        );
-
-        // -------------------------------------------------
-        // PRICE CARD
-        // -------------------------------------------------
+        // LIVE MARKET CARD
 
         LinearLayout priceCard =
                 createCard();
@@ -297,9 +245,9 @@ public class MainActivity extends Activity {
                 )
         );
 
-        TextView marketName =
+        marketName =
                 createText(
-                        "EUR/USD",
+                        selectedMarket,
                         24,
                         WHITE,
                         true
@@ -336,9 +284,7 @@ public class MainActivity extends Activity {
                 params(14)
         );
 
-        // -------------------------------------------------
         // SIGNAL CARD
-        // -------------------------------------------------
 
         LinearLayout signalCard =
                 createCard();
@@ -388,9 +334,7 @@ public class MainActivity extends Activity {
                 params(14)
         );
 
-        // -------------------------------------------------
-        // INDICATORS CARD
-        // -------------------------------------------------
+        // MARKET ANALYSIS
 
         LinearLayout indicatorsCard =
                 createCard();
@@ -443,7 +387,7 @@ public class MainActivity extends Activity {
         momentumText =
                 createMetric(
                         "TIMEFRAME",
-                        "--"
+                        selectedTimeframe
                 );
 
         row2.addView(
@@ -466,9 +410,7 @@ public class MainActivity extends Activity {
                 params(14)
         );
 
-        // -------------------------------------------------
-        // TRADE PLAN CARD
-        // -------------------------------------------------
+        // TRADE PLAN
 
         LinearLayout tradeCard =
                 createCard();
@@ -539,9 +481,7 @@ public class MainActivity extends Activity {
                 params(14)
         );
 
-        // -------------------------------------------------
-        // MULTI-TIMEFRAME CARD
-        // -------------------------------------------------
+        // MULTI-TIMEFRAME
 
         LinearLayout mtfCard =
                 createCard();
@@ -601,9 +541,7 @@ public class MainActivity extends Activity {
                 params(14)
         );
 
-        // -------------------------------------------------
         // SCAN BUTTON
-        // -------------------------------------------------
 
         scanButton =
                 new Button(this);
@@ -660,9 +598,7 @@ public class MainActivity extends Activity {
                 params(18)
         );
 
-        // -------------------------------------------------
         // FOOTER
-        // -------------------------------------------------
 
         TextView footer =
                 createText(
@@ -679,6 +615,73 @@ public class MainActivity extends Activity {
         root.addView(
                 footer,
                 params(18)
+        );
+
+        // MARKET SELECTION
+
+        marketSpinner.setOnItemSelectedListener(
+                new AdapterView.OnItemSelectedListener() {
+
+                    @Override
+                    public void onItemSelected(
+                            AdapterView<?> parent,
+                            View view,
+                            int position,
+                            long id
+                    ) {
+
+                        selectedMarket =
+                                markets[position];
+
+                        if (marketName != null) {
+                            marketName.setText(
+                                    selectedMarket
+                            );
+                        }
+
+                        resetForNewSelection();
+                    }
+
+                    @Override
+                    public void onNothingSelected(
+                            AdapterView<?> parent
+                    ) {
+                    }
+                }
+        );
+
+        // TIMEFRAME SELECTION
+
+        timeframeSpinner.setOnItemSelectedListener(
+                new AdapterView.OnItemSelectedListener() {
+
+                    @Override
+                    public void onItemSelected(
+                            AdapterView<?> parent,
+                            View view,
+                            int position,
+                            long id
+                    ) {
+
+                        selectedTimeframe =
+                                timeframes[position];
+
+                        if (momentumText != null) {
+                            momentumText.setText(
+                                    "TIMEFRAME\n"
+                                            + selectedTimeframe
+                            );
+                        }
+
+                        resetForNewSelection();
+                    }
+
+                    @Override
+                    public void onNothingSelected(
+                            AdapterView<?> parent
+                    ) {
+                    }
+                }
         );
 
         setContentView(
@@ -723,7 +726,8 @@ public class MainActivity extends Activity {
                                         () -> {
 
                                             connectionStatus.setText(
-                                                    "●  DATA ERROR"
+                                                    "●  DATA ERROR • "
+                                                            + selectedMarket
                                             );
 
                                             connectionStatus.setTextColor(
@@ -740,6 +744,10 @@ public class MainActivity extends Activity {
 
                                             clearTradeLevels();
 
+                                            priceText.setText(
+                                                    "PRICE  --"
+                                            );
+
                                             trendText.setText(
                                                     "TREND\nERROR"
                                             );
@@ -753,7 +761,8 @@ public class MainActivity extends Activity {
                                             );
 
                                             momentumText.setText(
-                                                    "STATUS\nERROR"
+                                                    "TIMEFRAME\n"
+                                                            + selectedTimeframe
                                             );
                                         }
                                 );
@@ -770,11 +779,17 @@ public class MainActivity extends Activity {
             return;
         }
 
+        final String marketToScan =
+                selectedMarket;
+
+        final String timeframeToScan =
+                selectedTimeframe;
+
         connectionStatus.setText(
                 "●  SCANNING "
-                        + selectedMarket
+                        + marketToScan
                         + " • "
-                        + selectedTimeframe
+                        + timeframeToScan
         );
 
         connectionStatus.setTextColor(
@@ -791,10 +806,79 @@ public class MainActivity extends Activity {
 
         clearTradeLevels();
 
-        signalRepository.requestSignal(
-                selectedMarket,
-                selectedTimeframe
+        priceText.setText(
+                "PRICE  --"
         );
+
+        signalRepository.requestSignal(
+                marketToScan,
+                timeframeToScan
+        );
+    }
+
+    private void resetForNewSelection() {
+
+        if (marketName != null) {
+            marketName.setText(
+                    selectedMarket
+            );
+        }
+
+        if (priceText != null) {
+            priceText.setText(
+                    "PRICE  --"
+            );
+        }
+
+        if (signalText != null) {
+            signalText.setText(
+                    "WAIT"
+            );
+
+            signalText.setTextColor(
+                    YELLOW
+            );
+        }
+
+        if (trendText != null) {
+            trendText.setText(
+                    "TREND\n--"
+            );
+        }
+
+        if (rsiText != null) {
+            rsiText.setText(
+                    "RSI\n--"
+            );
+        }
+
+        if (atrText != null) {
+            atrText.setText(
+                    "ATR\n--"
+            );
+        }
+
+        if (momentumText != null) {
+            momentumText.setText(
+                    "TIMEFRAME\n"
+                            + selectedTimeframe
+            );
+        }
+
+        clearTradeLevels();
+
+        if (connectionStatus != null) {
+            connectionStatus.setText(
+                    "●  READY "
+                            + selectedMarket
+                            + " • "
+                            + selectedTimeframe
+            );
+
+            connectionStatus.setTextColor(
+                    BLUE
+            );
+        }
     }
 
     private void updateDashboard(
@@ -805,8 +889,33 @@ public class MainActivity extends Activity {
             return;
         }
 
+        /*
+         * Ignore an old response if the user has
+         * already selected another market/timeframe.
+         */
+        if (!selectedMarket.equals(
+                signal.getSymbol()
+        )) {
+            return;
+        }
+
+        if (!selectedTimeframe.equals(
+                signal.getTimeframe()
+        )) {
+            return;
+        }
+
+        if (marketName != null) {
+            marketName.setText(
+                    signal.getSymbol()
+            );
+        }
+
         connectionStatus.setText(
-                "●  LIVE MARKET CONNECTED"
+                "●  LIVE DATA CONNECTED  •  "
+                        + signal.getSymbol()
+                        + " • "
+                        + signal.getTimeframe()
         );
 
         connectionStatus.setTextColor(
@@ -820,6 +929,7 @@ public class MainActivity extends Activity {
             priceText.setText(
                     "PRICE  "
                             + formatPrice(
+                            signal.getSymbol(),
                             signal.getEntry()
                     )
             );
@@ -891,6 +1001,7 @@ public class MainActivity extends Activity {
             atrText.setText(
                     "ATR\n"
                             + formatPrice(
+                            signal.getSymbol(),
                             signal.getAtr()
                     )
             );
@@ -915,6 +1026,7 @@ public class MainActivity extends Activity {
             entryText.setText(
                     "ENTRY                         "
                             + formatPrice(
+                            signal.getSymbol(),
                             signal.getEntry()
                     )
             );
@@ -922,6 +1034,7 @@ public class MainActivity extends Activity {
             stopLossText.setText(
                     "STOP LOSS                  "
                             + formatPrice(
+                            signal.getSymbol(),
                             signal.getStopLoss()
                     )
             );
@@ -929,6 +1042,7 @@ public class MainActivity extends Activity {
             tp1Text.setText(
                     "TAKE PROFIT 1          "
                             + formatPrice(
+                            signal.getSymbol(),
                             signal.getTakeProfit1()
                     )
             );
@@ -936,6 +1050,7 @@ public class MainActivity extends Activity {
             tp2Text.setText(
                     "TAKE PROFIT 2          "
                             + formatPrice(
+                            signal.getSymbol(),
                             signal.getTakeProfit2()
                     )
             );
@@ -943,6 +1058,7 @@ public class MainActivity extends Activity {
             tp3Text.setText(
                     "TAKE PROFIT 3          "
                             + formatPrice(
+                            signal.getSymbol(),
                             signal.getTakeProfit3()
                     )
             );
@@ -955,28 +1071,39 @@ public class MainActivity extends Activity {
 
     private void clearTradeLevels() {
 
-        entryText.setText(
-                "ENTRY                         --"
-        );
+        if (entryText != null) {
+            entryText.setText(
+                    "ENTRY                         --"
+            );
+        }
 
-        stopLossText.setText(
-                "STOP LOSS                  --"
-        );
+        if (stopLossText != null) {
+            stopLossText.setText(
+                    "STOP LOSS                  --"
+            );
+        }
 
-        tp1Text.setText(
-                "TAKE PROFIT 1          --"
-        );
+        if (tp1Text != null) {
+            tp1Text.setText(
+                    "TAKE PROFIT 1          --"
+            );
+        }
 
-        tp2Text.setText(
-                "TAKE PROFIT 2          --"
-        );
+        if (tp2Text != null) {
+            tp2Text.setText(
+                    "TAKE PROFIT 2          --"
+            );
+        }
 
-        tp3Text.setText(
-                "TAKE PROFIT 3          --"
-        );
+        if (tp3Text != null) {
+            tp3Text.setText(
+                    "TAKE PROFIT 3          --"
+            );
+        }
     }
 
     private String formatPrice(
+            String symbol,
             double value
     ) {
 
@@ -984,6 +1111,24 @@ public class MainActivity extends Activity {
                 || Double.isInfinite(value)) {
 
             return "--";
+        }
+
+        if ("USD/JPY".equalsIgnoreCase(symbol)) {
+
+            return String.format(
+                    Locale.US,
+                    "%.3f",
+                    value
+            );
+        }
+
+        if ("XAU/USD".equalsIgnoreCase(symbol)) {
+
+            return String.format(
+                    Locale.US,
+                    "%.2f",
+                    value
+            );
         }
 
         return String.format(
@@ -1030,15 +1175,37 @@ public class MainActivity extends Activity {
             String text
     ) {
 
-        TextView view =
-                createText(
-                        text,
-                        11,
-                        MUTED,
-                        true
+        return createText(
+                text,
+                11,
+                MUTED,
+                true
+        );
+    }
+
+    private Spinner createSpinner(
+            String[] values
+    ) {
+
+        Spinner spinner =
+                new Spinner(this);
+
+        ArrayAdapter<String> adapter =
+                new ArrayAdapter<>(
+                        this,
+                        android.R.layout.simple_spinner_item,
+                        values
                 );
 
-        return view;
+        adapter.setDropDownViewResource(
+                android.R.layout.simple_spinner_dropdown_item
+        );
+
+        spinner.setAdapter(
+                adapter
+        );
+
+        return spinner;
     }
 
     private TextView createMetric(
@@ -1170,13 +1337,13 @@ public class MainActivity extends Activity {
                 background
         );
 
-        LinearLayout.LayoutParams params =
+        LinearLayout.LayoutParams boxParams =
                 new LinearLayout.LayoutParams(
                         LinearLayout.LayoutParams.WRAP_CONTENT,
                         LinearLayout.LayoutParams.WRAP_CONTENT
                 );
 
-        params.setMargins(
+        boxParams.setMargins(
                 0,
                 0,
                 8,
@@ -1184,7 +1351,7 @@ public class MainActivity extends Activity {
         );
 
         view.setLayoutParams(
-                params
+                boxParams
         );
 
         return view;
@@ -1241,64 +1408,39 @@ public class MainActivity extends Activity {
         return card;
     }
 
-    private Spinner createSpinner(
-            String[] items
-    ) {
-
-        Spinner spinner =
-                new Spinner(this);
-
-        ArrayAdapter<String> adapter =
-                new ArrayAdapter<>(
-                        this,
-                        android.R.layout.simple_spinner_item,
-                        items
-                );
-
-        adapter.setDropDownViewResource(
-                android.R.layout.simple_spinner_dropdown_item
-        );
-
-        spinner.setAdapter(
-                adapter
-        );
-
-        return spinner;
-    }
-
     private LinearLayout.LayoutParams params(
             int topMargin
     ) {
 
-        LinearLayout.LayoutParams params =
+        LinearLayout.LayoutParams layoutParams =
                 new LinearLayout.LayoutParams(
                         LinearLayout.LayoutParams.MATCH_PARENT,
                         LinearLayout.LayoutParams.WRAP_CONTENT
                 );
 
-        params.topMargin =
+        layoutParams.topMargin =
                 topMargin;
 
-        return params;
+        return layoutParams;
     }
 
     private LinearLayout.LayoutParams weightParams() {
 
-        LinearLayout.LayoutParams params =
+        LinearLayout.LayoutParams layoutParams =
                 new LinearLayout.LayoutParams(
                         0,
                         LinearLayout.LayoutParams.WRAP_CONTENT,
                         1
                 );
 
-        params.setMargins(
+        layoutParams.setMargins(
                 4,
                 0,
                 4,
                 0
         );
 
-        return params;
+        return layoutParams;
     }
 
     @Override
