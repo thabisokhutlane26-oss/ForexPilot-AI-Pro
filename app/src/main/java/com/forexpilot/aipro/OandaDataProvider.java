@@ -7,6 +7,7 @@ import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -45,11 +46,8 @@ public class OandaDataProvider implements MarketDataProvider {
                     return;
                 }
 
-                String instrument =
-                        convertSymbol(symbol);
-
-                String granularity =
-                        convertTimeframe(timeframe);
+                String instrument = convertSymbol(symbol);
+                String granularity = convertTimeframe(timeframe);
 
                 if (instrument == null
                         || granularity == null) {
@@ -92,7 +90,7 @@ public class OandaDataProvider implements MarketDataProvider {
                 int responseCode =
                         connection.getResponseCode();
 
-                if (responseCode != 200) {
+                if (responseCode != HttpURLConnection.HTTP_OK) {
 
                     callback.onError(
                             "OANDA DATA ERROR: HTTP "
@@ -130,16 +128,25 @@ public class OandaDataProvider implements MarketDataProvider {
                 if (candles.isEmpty()) {
 
                     callback.onError(
-                            "OANDA RETURNED NO CANDLE DATA"
+                            "OANDA RETURNED NO COMPLETE CANDLES"
+                    );
+
+                    return;
+                }
+
+                Candle latest =
+                        candles.get(candles.size() - 1);
+
+                if (!isValidCandle(latest)) {
+
+                    callback.onError(
+                            "INVALID LIVE CANDLE DATA"
                     );
 
                     return;
                 }
 
                 callback.onCandlesReceived(candles);
-
-                Candle latest =
-                        candles.get(candles.size() - 1);
 
                 callback.onPriceReceived(
                         latest.getClose()
@@ -149,9 +156,19 @@ public class OandaDataProvider implements MarketDataProvider {
 
                 if (!stopped) {
 
+                    String message =
+                            e.getMessage();
+
+                    if (message == null
+                            || message.trim().isEmpty()) {
+
+                        message =
+                                "UNKNOWN NETWORK ERROR";
+                    }
+
                     callback.onError(
                             "LIVE DATA ERROR: "
-                                    + e.getMessage()
+                                    + message
                     );
                 }
 
@@ -187,7 +204,10 @@ public class OandaDataProvider implements MarketDataProvider {
             JSONObject item =
                     array.getJSONObject(i);
 
-            if (!item.optBoolean("complete", false)) {
+            if (!item.optBoolean(
+                    "complete",
+                    false
+            )) {
                 continue;
             }
 
@@ -198,25 +218,48 @@ public class OandaDataProvider implements MarketDataProvider {
                 continue;
             }
 
+            double open =
+                    mid.optDouble(
+                            "o",
+                            Double.NaN
+                    );
+
+            double high =
+                    mid.optDouble(
+                            "h",
+                            Double.NaN
+                    );
+
+            double low =
+                    mid.optDouble(
+                            "l",
+                            Double.NaN
+                    );
+
+            double close =
+                    mid.optDouble(
+                            "c",
+                            Double.NaN
+                    );
+
+            if (Double.isNaN(open)
+                    || Double.isNaN(high)
+                    || Double.isNaN(low)
+                    || Double.isNaN(close)) {
+
+                continue;
+            }
+
             long timestamp =
                     parseTimestamp(
                             item.optString("time")
                     );
 
-            double open =
-                    mid.getDouble("o");
-
-            double high =
-                    mid.getDouble("h");
-
-            double low =
-                    mid.getDouble("l");
-
-            double close =
-                    mid.getDouble("c");
-
             double volume =
-                    item.optDouble("volume", 0.0);
+                    item.optDouble(
+                            "volume",
+                            0.0
+                    );
 
             candles.add(
                     new Candle(
@@ -237,34 +280,35 @@ public class OandaDataProvider implements MarketDataProvider {
             String timestamp
     ) {
         try {
-            String value =
-                    timestamp.replace(
-                            "T",
-                            ""
-                    );
-
-            int dot =
-                    value.indexOf('.');
-
-            if (dot >= 0) {
-                value =
-                        value.substring(
-                                0,
-                                dot
-                        );
-            }
-
-            value =
-                    value.replace(
-                            "Z",
-                            ""
-                    );
-
-            return System.currentTimeMillis();
+            return Instant.parse(
+                    timestamp
+            ).toEpochMilli();
 
         } catch (Exception e) {
-            return System.currentTimeMillis();
+            return 0L;
         }
+    }
+
+    private boolean isValidCandle(
+            Candle candle
+    ) {
+        return candle != null
+                && candle.getTimestamp() > 0
+                && isValidNumber(candle.getOpen())
+                && isValidNumber(candle.getHigh())
+                && isValidNumber(candle.getLow())
+                && isValidNumber(candle.getClose())
+                && candle.getOpen() > 0
+                && candle.getHigh() > 0
+                && candle.getLow() > 0
+                && candle.getClose() > 0;
+    }
+
+    private boolean isValidNumber(
+            double value
+    ) {
+        return !Double.isNaN(value)
+                && !Double.isInfinite(value);
     }
 
     private String convertSymbol(
