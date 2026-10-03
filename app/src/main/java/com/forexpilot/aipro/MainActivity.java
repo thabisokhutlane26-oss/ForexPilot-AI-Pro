@@ -53,6 +53,13 @@ public class MainActivity extends Activity {
     private TextView tp2Text;
     private TextView tp3Text;
 
+    private TextView mtf5mText;
+    private TextView mtf15mText;
+    private TextView mtf30mText;
+    private TextView mtf1hText;
+    private TextView mtf4hText;
+    private TextView mtf1dText;
+
     private Spinner marketSpinner;
     private Spinner timeframeSpinner;
     private Button scanButton;
@@ -704,20 +711,33 @@ public class MainActivity extends Activity {
         );
 
         String[] labels = {
-                "5M\nWAIT",
-                "15M\nWAIT",
-                "30M\nWAIT",
-                "1H\nWAIT",
-                "4H\nWAIT",
-                "1D\nWAIT"
-        };
+        "5M\nWAIT",
+        "15M\nWAIT",
+        "30M\nWAIT",
+        "1H\nWAIT",
+        "4H\nWAIT",
+        "1D\nWAIT"
+};
 
-        for (String label : labels) {
+mtf5mText = createTimeframeBox(labels[0]);
+mtf15mText = createTimeframeBox(labels[1]);
+mtf30mText = createTimeframeBox(labels[2]);
+mtf1hText = createTimeframeBox(labels[3]);
+mtf4hText = createTimeframeBox(labels[4]);
+mtf1dText = createTimeframeBox(labels[5]);
 
-            TextView box =
-                    createTimeframeBox(
-                            label
-                    );
+TextView[] mtfBoxes = {
+        mtf5mText,
+        mtf15mText,
+        mtf30mText,
+        mtf1hText,
+        mtf4hText,
+        mtf1dText
+};
+
+for (TextView box : mtfBoxes) {
+    timeframeRow.addView(box);
+}
 
             timeframeRow.addView(box);
         }
