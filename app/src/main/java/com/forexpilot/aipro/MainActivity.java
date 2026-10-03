@@ -18,14 +18,17 @@ import android.widget.Spinner;
 import android.widget.TextView;
 
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Date;
+import java.util.List;
 import java.util.Locale;
 import java.util.TimeZone;
 
 public class MainActivity extends Activity {
 
     private SignalRepository signalRepository;
+    private MarketDataProvider marketDataProvider;
 
     private TextView connectionStatus;
 
@@ -68,6 +71,9 @@ public class MainActivity extends Activity {
     private String selectedTimeframe = "15M";
 
     private boolean lastForexOpen = false;
+
+    private boolean mtfScanning = false;
+    private int mtfRequestIndex = 0;
 
     private final String[] markets = {
             "XAU/USD",
@@ -170,7 +176,9 @@ public class MainActivity extends Activity {
 
         scrollView.addView(root);
 
+        // =========================================================
         // HEADER
+        // =========================================================
 
         LinearLayout header =
                 new LinearLayout(this);
@@ -236,7 +244,9 @@ public class MainActivity extends Activity {
                 params(0)
         );
 
+        // =========================================================
         // CLOCK + FOREX MARKET STATUS
+        // =========================================================
 
         LinearLayout marketClockCard =
                 createCard();
@@ -320,7 +330,9 @@ public class MainActivity extends Activity {
                 params(18)
         );
 
+        // =========================================================
         // FOREX SESSIONS
+        // =========================================================
 
         LinearLayout sessionsCard =
                 createCard();
@@ -389,7 +401,9 @@ public class MainActivity extends Activity {
                 params(14)
         );
 
+        // =========================================================
         // MARKET SELECTOR
+        // =========================================================
 
         LinearLayout marketSelector =
                 createCard();
@@ -436,7 +450,9 @@ public class MainActivity extends Activity {
                 params(14)
         );
 
+        // =========================================================
         // LIVE MARKET CARD
+        // =========================================================
 
         LinearLayout priceCard =
                 createCard();
@@ -486,7 +502,9 @@ public class MainActivity extends Activity {
                 params(14)
         );
 
+        // =========================================================
         // SIGNAL CARD
+        // =========================================================
 
         LinearLayout signalCard =
                 createCard();
@@ -536,7 +554,9 @@ public class MainActivity extends Activity {
                 params(14)
         );
 
+        // =========================================================
         // MARKET ANALYSIS
+        // =========================================================
 
         LinearLayout indicatorsCard =
                 createCard();
@@ -612,7 +632,9 @@ public class MainActivity extends Activity {
                 params(14)
         );
 
+        // =========================================================
         // TRADE PLAN
+        // =========================================================
 
         LinearLayout tradeCard =
                 createCard();
@@ -683,15 +705,30 @@ public class MainActivity extends Activity {
                 params(14)
         );
 
+        // =========================================================
         // MULTI-TIMEFRAME
+        // =========================================================
 
         LinearLayout mtfCard =
                 createCard();
 
         mtfCard.addView(
                 createSmallLabel(
-                        "MULTI-TIMEFRAME"
+                        "MULTI-TIMEFRAME • REAL-TIME CONFLUENCE"
                 )
+        );
+
+        TextView mtfInfo =
+                createText(
+                        "6 timeframe technical analysis",
+                        11,
+                        MUTED,
+                        false
+                );
+
+        mtfCard.addView(
+                mtfInfo,
+                params(4)
         );
 
         HorizontalScrollView horizontal =
@@ -710,37 +747,59 @@ public class MainActivity extends Activity {
                 LinearLayout.HORIZONTAL
         );
 
-        String[] labels = {
-        "5M\nWAIT",
-        "15M\nWAIT",
-        "30M\nWAIT",
-        "1H\nWAIT",
-        "4H\nWAIT",
-        "1D\nWAIT"
-};
+        mtf5mText =
+                createTimeframeBox(
+                        "5M\nWAIT"
+                );
 
-mtf5mText = createTimeframeBox(labels[0]);
-mtf15mText = createTimeframeBox(labels[1]);
-mtf30mText = createTimeframeBox(labels[2]);
-mtf1hText = createTimeframeBox(labels[3]);
-mtf4hText = createTimeframeBox(labels[4]);
-mtf1dText = createTimeframeBox(labels[5]);
+        mtf15mText =
+                createTimeframeBox(
+                        "15M\nWAIT"
+                );
 
-TextView[] mtfBoxes = {
-        mtf5mText,
-        mtf15mText,
-        mtf30mText,
-        mtf1hText,
-        mtf4hText,
-        mtf1dText
-};
+        mtf30mText =
+                createTimeframeBox(
+                        "30M\nWAIT"
+                );
 
-for (TextView box : mtfBoxes) {
-    timeframeRow.addView(box);
-}
+        mtf1hText =
+                createTimeframeBox(
+                        "1H\nWAIT"
+                );
 
-            timeframeRow.addView(box);
-        }
+        mtf4hText =
+                createTimeframeBox(
+                        "4H\nWAIT"
+                );
+
+        mtf1dText =
+                createTimeframeBox(
+                        "1D\nWAIT"
+                );
+
+        timeframeRow.addView(
+                mtf5mText
+        );
+
+        timeframeRow.addView(
+                mtf15mText
+        );
+
+        timeframeRow.addView(
+                mtf30mText
+        );
+
+        timeframeRow.addView(
+                mtf1hText
+        );
+
+        timeframeRow.addView(
+                mtf4hText
+        );
+
+        timeframeRow.addView(
+                mtf1dText
+        );
 
         horizontal.addView(
                 timeframeRow
@@ -756,7 +815,9 @@ for (TextView box : mtfBoxes) {
                 params(14)
         );
 
+        // =========================================================
         // SCAN BUTTON
+        // =========================================================
 
         scanButton =
                 new Button(this);
@@ -813,7 +874,9 @@ for (TextView box : mtfBoxes) {
                 params(18)
         );
 
+        // =========================================================
         // FOOTER
+        // =========================================================
 
         TextView footer =
                 createText(
@@ -832,7 +895,9 @@ for (TextView box : mtfBoxes) {
                 params(18)
         );
 
+        // =========================================================
         // MARKET SELECTION
+        // =========================================================
 
         marketSpinner.setOnItemSelectedListener(
                 new AdapterView.OnItemSelectedListener() {
@@ -865,7 +930,9 @@ for (TextView box : mtfBoxes) {
                 }
         );
 
+        // =========================================================
         // TIMEFRAME SELECTION
+        // =========================================================
 
         timeframeSpinner.setOnItemSelectedListener(
                 new AdapterView.OnItemSelectedListener() {
@@ -964,10 +1031,6 @@ for (TextView box : mtfBoxes) {
                         now.getTime()
                 );
 
-        // =========================================================
-        // MARKET LOCK
-        // =========================================================
-
         if (forexStatusText != null) {
 
             if (forexOpen) {
@@ -1036,16 +1099,14 @@ for (TextView box : mtfBoxes) {
             }
         }
 
-        // If the market has just closed, immediately remove
-        // any active signal and trade levels.
         if (!forexOpen) {
+
+            mtfScanning = false;
 
             showMarketClosedState();
 
         } else if (!lastForexOpen) {
 
-            // Market has just opened again.
-            // Automatically resume scanning.
             if (signalRepository != null) {
                 requestCurrentSignal();
             }
@@ -1054,7 +1115,9 @@ for (TextView box : mtfBoxes) {
         lastForexOpen =
                 forexOpen;
 
+        // =========================================================
         // SESSION MONITOR
+        // =========================================================
 
         updateSession(
                 sydneySessionText,
@@ -1150,6 +1213,10 @@ for (TextView box : mtfBoxes) {
         }
 
         clearTradeLevels();
+
+        resetMtfBoxes(
+                "MARKET CLOSED"
+        );
     }
 
     private boolean isForexMarketOpen(
@@ -1186,24 +1253,20 @@ for (TextView box : mtfBoxes) {
         int totalMinutes =
                 (hour * 60) + minute;
 
-        // Saturday = completely closed.
         if (day == Calendar.SATURDAY) {
             return false;
         }
 
-        // Sunday opens at 17:00 New York.
         if (day == Calendar.SUNDAY) {
 
             return totalMinutes >= 17 * 60;
         }
 
-        // Friday closes at 17:00 New York.
         if (day == Calendar.FRIDAY) {
 
             return totalMinutes < 17 * 60;
         }
 
-        // Monday through Thursday.
         return true;
     }
 
@@ -1332,7 +1395,7 @@ for (TextView box : mtfBoxes) {
     }
 
     // =============================================================
-    // DATA
+    // DATA CONNECTION
     // =============================================================
 
     private void connectToMarketData() {
@@ -1340,14 +1403,14 @@ for (TextView box : mtfBoxes) {
         String apiKey =
                 AppConfig.getTwelveDataApiKey();
 
-        MarketDataProvider provider =
+        marketDataProvider =
                 new TwelveDataProvider(
                         apiKey
                 );
 
         signalRepository =
                 new SignalRepository(
-                        provider,
+                        marketDataProvider,
                         new SignalRepository.SignalCallback() {
 
                             @Override
@@ -1358,9 +1421,6 @@ for (TextView box : mtfBoxes) {
                                 runOnUiThread(
                                         () -> {
 
-                                            // IMPORTANT:
-                                            // Never accept a signal after
-                                            // the Forex market has closed.
                                             if (!isForexMarketOpen(
                                                     new Date()
                                             )) {
@@ -1385,9 +1445,6 @@ for (TextView box : mtfBoxes) {
                                 runOnUiThread(
                                         () -> {
 
-                                            // If the market closed while
-                                            // the request was running,
-                                            // keep the market lock active.
                                             if (!isForexMarketOpen(
                                                     new Date()
                                             )) {
@@ -1442,7 +1499,6 @@ for (TextView box : mtfBoxes) {
                         }
                 );
 
-        // Only request data if the market is currently open.
         if (isForexMarketOpen(
                 new Date()
         )) {
@@ -1455,14 +1511,16 @@ for (TextView box : mtfBoxes) {
         }
     }
 
+    // =============================================================
+    // PRIMARY SIGNAL
+    // =============================================================
+
     private void requestCurrentSignal() {
 
         if (signalRepository == null) {
             return;
         }
 
-        // HARD MARKET LOCK.
-        // This prevents manual scans while Forex is closed.
         if (!isForexMarketOpen(
                 new Date()
         )) {
@@ -1507,6 +1565,389 @@ for (TextView box : mtfBoxes) {
                 marketToScan,
                 timeframeToScan
         );
+
+        requestMultiTimeframeAnalysis(
+                marketToScan
+        );
+    }
+
+    // =============================================================
+    // MULTI-TIMEFRAME ANALYSIS
+    // =============================================================
+
+    private void requestMultiTimeframeAnalysis(
+            String market
+    ) {
+
+        if (marketDataProvider == null) {
+            return;
+        }
+
+        if (!isForexMarketOpen(
+                new Date()
+        )) {
+
+            resetMtfBoxes(
+                    "MARKET CLOSED"
+            );
+
+            return;
+        }
+
+        mtfScanning = true;
+        mtfRequestIndex = 0;
+
+        resetMtfBoxes(
+                "LOADING"
+        );
+
+        requestNextMtfTimeframe(
+                market
+        );
+    }
+
+    private void requestNextMtfTimeframe(
+            String market
+    ) {
+
+        if (!mtfScanning) {
+            return;
+        }
+
+        if (!isForexMarketOpen(
+                new Date()
+        )) {
+
+            mtfScanning = false;
+
+            resetMtfBoxes(
+                    "MARKET CLOSED"
+            );
+
+            return;
+        }
+
+        if (!market.equals(
+                selectedMarket
+        )) {
+
+            mtfScanning = false;
+
+            return;
+        }
+
+        if (mtfRequestIndex >= timeframes.length) {
+
+            mtfScanning = false;
+
+            updateMtfConfluenceStatus();
+
+            return;
+        }
+
+        final int currentIndex =
+                mtfRequestIndex;
+
+        final String timeframe =
+                timeframes[currentIndex];
+
+        updateMtfBox(
+                timeframe,
+                "LOADING",
+                YELLOW
+        );
+
+        marketDataProvider.requestCandles(
+                market,
+                timeframe,
+                new MarketDataManager.MarketDataCallback() {
+
+                    @Override
+                    public void onCandlesReceived(
+                            List<Candle> candles
+                    ) {
+
+                        runOnUiThread(
+                                () -> {
+
+                                    if (!mtfScanning) {
+                                        return;
+                                    }
+
+                                    if (!isForexMarketOpen(
+                                            new Date()
+                                    )) {
+
+                                        mtfScanning = false;
+
+                                        resetMtfBoxes(
+                                                "MARKET CLOSED"
+                                        );
+
+                                        return;
+                                    }
+
+                                    if (!market.equals(
+                                            selectedMarket
+                                    )) {
+
+                                        mtfScanning = false;
+
+                                        return;
+                                    }
+
+                                    MultiTimeframeEngine.TimeframeResult result =
+                                            MultiTimeframeEngine.analyzeTimeframe(
+                                                    market,
+                                                    timeframe,
+                                                    candles
+                                            );
+
+                                    displayMtfResult(
+                                            result
+                                    );
+
+                                    mtfRequestIndex++;
+
+                                    requestNextMtfTimeframe(
+                                            market
+                                    );
+                                }
+                        );
+                    }
+
+                    @Override
+                    public void onPriceReceived(
+                            double price
+                    ) {
+                        // Primary signal controls the main price display.
+                    }
+
+                    @Override
+                    public void onError(
+                            String message
+                    ) {
+
+                        runOnUiThread(
+                                () -> {
+
+                                    if (!mtfScanning) {
+                                        return;
+                                    }
+
+                                    if (!isForexMarketOpen(
+                                            new Date()
+                                    )) {
+
+                                        mtfScanning = false;
+
+                                        resetMtfBoxes(
+                                                "MARKET CLOSED"
+                                        );
+
+                                        return;
+                                    }
+
+                                    if (!market.equals(
+                                            selectedMarket
+                                    )) {
+
+                                        mtfScanning = false;
+
+                                        return;
+                                    }
+
+                                    updateMtfBox(
+                                            timeframe,
+                                            "WAIT",
+                                            YELLOW
+                                    );
+
+                                    mtfRequestIndex++;
+
+                                    requestNextMtfTimeframe(
+                                            market
+                                    );
+                                }
+                        );
+                    }
+                }
+        );
+    }
+
+    private void displayMtfResult(
+            MultiTimeframeEngine.TimeframeResult result
+    ) {
+
+        if (result == null) {
+            return;
+        }
+
+        String timeframe =
+                result.getTimeframe();
+
+        Signal.Direction direction =
+                result.getDirection();
+
+        if (direction == Signal.Direction.BUY) {
+
+            updateMtfBox(
+                    timeframe,
+                    "BUY",
+                    GREEN
+            );
+
+        } else if (
+                direction == Signal.Direction.SELL
+        ) {
+
+            updateMtfBox(
+                    timeframe,
+                    "SELL",
+                    RED
+            );
+
+        } else {
+
+            updateMtfBox(
+                    timeframe,
+                    "WAIT",
+                    YELLOW
+            );
+        }
+    }
+
+    private void updateMtfBox(
+            String timeframe,
+            String status,
+            int color
+    ) {
+
+        TextView view =
+                getMtfView(
+                        timeframe
+                );
+
+        if (view == null) {
+            return;
+        }
+
+        view.setText(
+                timeframe
+                        + "\n"
+                        + status
+        );
+
+        view.setTextColor(
+                color
+        );
+    }
+
+    private TextView getMtfView(
+            String timeframe
+    ) {
+
+        if (timeframe == null) {
+            return null;
+        }
+
+        switch (
+                timeframe.toUpperCase(
+                        Locale.ENGLISH
+                )
+        ) {
+
+            case "5M":
+                return mtf5mText;
+
+            case "15M":
+                return mtf15mText;
+
+            case "30M":
+                return mtf30mText;
+
+            case "1H":
+                return mtf1hText;
+
+            case "4H":
+                return mtf4hText;
+
+            case "1D":
+                return mtf1dText;
+
+            default:
+                return null;
+        }
+    }
+
+    private void resetMtfBoxes(
+            String status
+    ) {
+
+        updateMtfBox(
+                "5M",
+                status,
+                status.equals("MARKET CLOSED")
+                        ? MUTED
+                        : YELLOW
+        );
+
+        updateMtfBox(
+                "15M",
+                status,
+                status.equals("MARKET CLOSED")
+                        ? MUTED
+                        : YELLOW
+        );
+
+        updateMtfBox(
+                "30M",
+                status,
+                status.equals("MARKET CLOSED")
+                        ? MUTED
+                        : YELLOW
+        );
+
+        updateMtfBox(
+                "1H",
+                status,
+                status.equals("MARKET CLOSED")
+                        ? MUTED
+                        : YELLOW
+        );
+
+        updateMtfBox(
+                "4H",
+                status,
+                status.equals("MARKET CLOSED")
+                        ? MUTED
+                        : YELLOW
+        );
+
+        updateMtfBox(
+                "1D",
+                status,
+                status.equals("MARKET CLOSED")
+                        ? MUTED
+                        : YELLOW
+        );
+    }
+
+    private void updateMtfConfluenceStatus() {
+
+        if (!isForexMarketOpen(
+                new Date()
+        )) {
+            return;
+        }
+
+        // The six visible boxes are the direct timeframe
+        // results. The confluence engine is calculated again
+        // from fresh candles on the next complete scan.
+        //
+        // Keep the main connection status focused on the
+        // primary selected timeframe rather than replacing it
+        // with an unverified confluence message.
     }
 
     // =============================================================
@@ -1515,14 +1956,14 @@ for (TextView box : mtfBoxes) {
 
     private void resetForNewSelection() {
 
+        mtfScanning = false;
+
         if (marketName != null) {
             marketName.setText(
                     selectedMarket
             );
         }
 
-        // Keep the market lock active after changing
-        // market or timeframe.
         if (!isForexMarketOpen(
                 new Date()
         )) {
@@ -1533,12 +1974,14 @@ for (TextView box : mtfBoxes) {
         }
 
         if (priceText != null) {
+
             priceText.setText(
                     "PRICE  --"
             );
         }
 
         if (signalText != null) {
+
             signalText.setText(
                     "WAIT"
             );
@@ -1549,24 +1992,28 @@ for (TextView box : mtfBoxes) {
         }
 
         if (trendText != null) {
+
             trendText.setText(
                     "TREND\n--"
             );
         }
 
         if (rsiText != null) {
+
             rsiText.setText(
                     "RSI\n--"
             );
         }
 
         if (atrText != null) {
+
             atrText.setText(
                     "ATR\n--"
             );
         }
 
         if (momentumText != null) {
+
             momentumText.setText(
                     "TIMEFRAME\n"
                             + selectedTimeframe
@@ -1574,6 +2021,10 @@ for (TextView box : mtfBoxes) {
         }
 
         clearTradeLevels();
+
+        resetMtfBoxes(
+                "WAIT"
+        );
 
         if (connectionStatus != null) {
 
@@ -1588,6 +2039,8 @@ for (TextView box : mtfBoxes) {
                     BLUE
             );
         }
+
+        requestCurrentSignal();
     }
 
     // =============================================================
@@ -1602,7 +2055,6 @@ for (TextView box : mtfBoxes) {
             return;
         }
 
-        // Final safety check.
         if (!isForexMarketOpen(
                 new Date()
         )) {
@@ -1792,30 +2244,35 @@ for (TextView box : mtfBoxes) {
     private void clearTradeLevels() {
 
         if (entryText != null) {
+
             entryText.setText(
                     "ENTRY                         --"
             );
         }
 
         if (stopLossText != null) {
+
             stopLossText.setText(
                     "STOP LOSS                  --"
             );
         }
 
         if (tp1Text != null) {
+
             tp1Text.setText(
                     "TAKE PROFIT 1          --"
             );
         }
 
         if (tp2Text != null) {
+
             tp2Text.setText(
                     "TAKE PROFIT 2          --"
             );
         }
 
         if (tp3Text != null) {
+
             tp3Text.setText(
                     "TAKE PROFIT 3          --"
             );
@@ -2226,8 +2683,14 @@ for (TextView box : mtfBoxes) {
                 clockRunnable
         );
 
+        mtfScanning = false;
+
         if (signalRepository != null) {
             signalRepository.stop();
+        }
+
+        if (marketDataProvider != null) {
+            marketDataProvider.stop();
         }
 
         super.onDestroy();
