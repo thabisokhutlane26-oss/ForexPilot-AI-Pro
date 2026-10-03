@@ -5,6 +5,7 @@ import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
+import android.os.Handler;
 import android.view.Gravity;
 import android.view.View;
 import android.widget.AdapterView;
@@ -16,13 +17,28 @@ import android.widget.ScrollView;
 import android.widget.Spinner;
 import android.widget.TextView;
 
+import java.text.SimpleDateFormat;
+import java.util.Calendar;
+import java.util.Date;
 import java.util.Locale;
+import java.util.TimeZone;
 
 public class MainActivity extends Activity {
 
     private SignalRepository signalRepository;
 
     private TextView connectionStatus;
+
+    private TextView clockText;
+    private TextView dateText;
+    private TextView forexStatusText;
+    private TextView nextMarketText;
+
+    private TextView sydneySessionText;
+    private TextView tokyoSessionText;
+    private TextView londonSessionText;
+    private TextView newYorkSessionText;
+
     private TextView marketName;
     private TextView priceText;
     private TextView signalText;
@@ -88,11 +104,35 @@ public class MainActivity extends Activity {
     private final int BLUE =
             Color.rgb(70, 150, 255);
 
+    private final Handler clockHandler =
+            new Handler();
+
+    private final Runnable clockRunnable =
+            new Runnable() {
+                @Override
+                public void run() {
+
+                    updateTimeAndSessions();
+
+                    clockHandler.postDelayed(
+                            this,
+                            1000
+                    );
+                }
+            };
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
         buildDashboard();
+
+        updateTimeAndSessions();
+
+        clockHandler.post(
+                clockRunnable
+        );
+
         connectToMarketData();
     }
 
@@ -187,6 +227,159 @@ public class MainActivity extends Activity {
                 params(0)
         );
 
+        // CLOCK + FOREX MARKET STATUS
+
+        LinearLayout marketClockCard =
+                createCard();
+
+        marketClockCard.addView(
+                createSmallLabel(
+                        "MARKET CLOCK"
+                )
+        );
+
+        clockText =
+                createText(
+                        "--:--:-- SAST",
+                        28,
+                        WHITE,
+                        true
+                );
+
+        clockText.setGravity(
+                Gravity.CENTER
+        );
+
+        marketClockCard.addView(
+                clockText,
+                params(8)
+        );
+
+        dateText =
+                createText(
+                        "LOADING DATE",
+                        12,
+                        MUTED,
+                        true
+                );
+
+        dateText.setGravity(
+                Gravity.CENTER
+        );
+
+        marketClockCard.addView(
+                dateText,
+                params(4)
+        );
+
+        forexStatusText =
+                createText(
+                        "●  CHECKING FOREX MARKET",
+                        17,
+                        YELLOW,
+                        true
+                );
+
+        forexStatusText.setGravity(
+                Gravity.CENTER
+        );
+
+        marketClockCard.addView(
+                forexStatusText,
+                params(14)
+        );
+
+        nextMarketText =
+                createText(
+                        "CHECKING MARKET HOURS...",
+                        11,
+                        MUTED,
+                        false
+                );
+
+        nextMarketText.setGravity(
+                Gravity.CENTER
+        );
+
+        marketClockCard.addView(
+                nextMarketText,
+                params(5)
+        );
+
+        root.addView(
+                marketClockCard,
+                params(18)
+        );
+
+        // FOREX SESSIONS
+
+        LinearLayout sessionsCard =
+                createCard();
+
+        sessionsCard.addView(
+                createSmallLabel(
+                        "FOREX SESSIONS • SAST"
+                )
+        );
+
+        TextView sessionInfo =
+                createText(
+                        "Global session monitor",
+                        11,
+                        MUTED,
+                        false
+                );
+
+        sessionsCard.addView(
+                sessionInfo,
+                params(4)
+        );
+
+        sydneySessionText =
+                createSessionRow(
+                        "SYDNEY"
+                );
+
+        tokyoSessionText =
+                createSessionRow(
+                        "TOKYO"
+                );
+
+        londonSessionText =
+                createSessionRow(
+                        "LONDON"
+                );
+
+        newYorkSessionText =
+                createSessionRow(
+                        "NEW YORK"
+                );
+
+        sessionsCard.addView(
+                sydneySessionText,
+                params(10)
+        );
+
+        sessionsCard.addView(
+                tokyoSessionText,
+                params(6)
+        );
+
+        sessionsCard.addView(
+                londonSessionText,
+                params(6)
+        );
+
+        sessionsCard.addView(
+                newYorkSessionText,
+                params(6)
+        );
+
+        root.addView(
+                sessionsCard,
+                params(14)
+        );
+
         // MARKET SELECTOR
 
         LinearLayout marketSelector =
@@ -231,7 +424,7 @@ public class MainActivity extends Activity {
 
         root.addView(
                 marketSelector,
-                params(18)
+                params(14)
         );
 
         // LIVE MARKET CARD
@@ -689,6 +882,330 @@ public class MainActivity extends Activity {
         );
     }
 
+    // =============================================================
+    // CLOCK + FOREX STATUS + SESSIONS
+    // =============================================================
+
+    private void updateTimeAndSessions() {
+
+        Calendar now =
+                Calendar.getInstance();
+
+        SimpleDateFormat timeFormat =
+                new SimpleDateFormat(
+                        "HH:mm:ss",
+                        Locale.ENGLISH
+                );
+
+        timeFormat.setTimeZone(
+                TimeZone.getTimeZone(
+                        "Africa/Johannesburg"
+                )
+        );
+
+        SimpleDateFormat dateFormat =
+                new SimpleDateFormat(
+                        "EEEE • dd MMMM yyyy",
+                        Locale.ENGLISH
+                );
+
+        dateFormat.setTimeZone(
+                TimeZone.getTimeZone(
+                        "Africa/Johannesburg"
+                )
+        );
+
+        if (clockText != null) {
+
+            clockText.setText(
+                    timeFormat.format(
+                            now.getTime()
+                    )
+                            + " SAST"
+            );
+        }
+
+        if (dateText != null) {
+
+            dateText.setText(
+                    dateFormat.format(
+                            now.getTime()
+                    )
+                            .toUpperCase(
+                                    Locale.ENGLISH
+                            )
+            );
+        }
+
+        boolean forexOpen =
+                isForexMarketOpen(
+                        now.getTime()
+                );
+
+        if (forexStatusText != null) {
+
+            if (forexOpen) {
+
+                forexStatusText.setText(
+                        "●  FOREX MARKET OPEN"
+                );
+
+                forexStatusText.setTextColor(
+                        GREEN
+                );
+
+            } else {
+
+                forexStatusText.setText(
+                        "●  FOREX MARKET CLOSED"
+                );
+
+                forexStatusText.setTextColor(
+                        RED
+                );
+            }
+        }
+
+        if (nextMarketText != null) {
+
+            if (forexOpen) {
+
+                nextMarketText.setText(
+                        "SIGNAL SCANNER • ACTIVE"
+                );
+
+                nextMarketText.setTextColor(
+                        GREEN
+                );
+
+            } else {
+
+                nextMarketText.setText(
+                        "MARKET CLOSED • NO NEW SIGNALS"
+                );
+
+                nextMarketText.setTextColor(
+                        MUTED
+                );
+            }
+        }
+
+        updateSession(
+                sydneySessionText,
+                "SYDNEY",
+                "Australia/Sydney",
+                8,
+                17
+        );
+
+        updateSession(
+                tokyoSessionText,
+                "TOKYO",
+                "Asia/Tokyo",
+                9,
+                18
+        );
+
+        updateSession(
+                londonSessionText,
+                "LONDON",
+                "Europe/London",
+                8,
+                17
+        );
+
+        updateSession(
+                newYorkSessionText,
+                "NEW YORK",
+                "America/New_York",
+                8,
+                17
+        );
+    }
+
+    private boolean isForexMarketOpen(
+            Date date
+    ) {
+
+        Calendar newYork =
+                Calendar.getInstance(
+                        TimeZone.getTimeZone(
+                                "America/New_York"
+                        ),
+                        Locale.ENGLISH
+                );
+
+        newYork.setTime(
+                date
+        );
+
+        int day =
+                newYork.get(
+                        Calendar.DAY_OF_WEEK
+                );
+
+        int hour =
+                newYork.get(
+                        Calendar.HOUR_OF_DAY
+                );
+
+        int minute =
+                newYork.get(
+                        Calendar.MINUTE
+                );
+
+        int totalMinutes =
+                (hour * 60) + minute;
+
+        // Saturday = completely closed.
+        if (day == Calendar.SATURDAY) {
+            return false;
+        }
+
+        // Sunday opens at 17:00 New York.
+        if (day == Calendar.SUNDAY) {
+
+            return totalMinutes >= 17 * 60;
+        }
+
+        // Friday closes at 17:00 New York.
+        if (day == Calendar.FRIDAY) {
+
+            return totalMinutes < 17 * 60;
+        }
+
+        // Monday through Thursday.
+        return true;
+    }
+
+    private void updateSession(
+            TextView view,
+            String name,
+            String timeZoneId,
+            int openHour,
+            int closeHour
+    ) {
+
+        if (view == null) {
+            return;
+        }
+
+        Calendar local =
+                Calendar.getInstance(
+                        TimeZone.getTimeZone(
+                                timeZoneId
+                        ),
+                        Locale.ENGLISH
+                );
+
+        Date now =
+                new Date();
+
+        local.setTime(
+                now
+        );
+
+        int day =
+                local.get(
+                        Calendar.DAY_OF_WEEK
+                );
+
+        int hour =
+                local.get(
+                        Calendar.HOUR_OF_DAY
+                );
+
+        int minute =
+                local.get(
+                        Calendar.MINUTE
+                );
+
+        boolean weekend =
+                day == Calendar.SATURDAY
+                        || day == Calendar.SUNDAY;
+
+        int totalMinutes =
+                (hour * 60) + minute;
+
+        boolean open =
+                !weekend
+                        && totalMinutes >= openHour * 60
+                        && totalMinutes < closeHour * 60;
+
+        SimpleDateFormat localTimeFormat =
+                new SimpleDateFormat(
+                        "HH:mm",
+                        Locale.ENGLISH
+                );
+
+        localTimeFormat.setTimeZone(
+                TimeZone.getTimeZone(
+                        timeZoneId
+                )
+        );
+
+        SimpleDateFormat sastTimeFormat =
+                new SimpleDateFormat(
+                        "HH:mm",
+                        Locale.ENGLISH
+                );
+
+        sastTimeFormat.setTimeZone(
+                TimeZone.getTimeZone(
+                        "Africa/Johannesburg"
+                )
+        );
+
+        String localTime =
+                localTimeFormat.format(
+                        now
+                );
+
+        String sastTime =
+                sastTimeFormat.format(
+                        now
+                );
+
+        if (open) {
+
+            view.setText(
+                    "●  "
+                            + name
+                            + "     OPEN"
+                            + "\n"
+                            + "    Local "
+                            + localTime
+                            + "     •     SAST "
+                            + sastTime
+            );
+
+            view.setTextColor(
+                    GREEN
+            );
+
+        } else {
+
+            view.setText(
+                    "●  "
+                            + name
+                            + "     CLOSED"
+                            + "\n"
+                            + "    Local "
+                            + localTime
+                            + "     •     SAST "
+                            + sastTime
+            );
+
+            view.setTextColor(
+                    MUTED
+            );
+        }
+    }
+
+    // =============================================================
+    // DATA
+    // =============================================================
+
     private void connectToMarketData() {
 
         String apiKey =
@@ -816,6 +1333,10 @@ public class MainActivity extends Activity {
         );
     }
 
+    // =============================================================
+    // SELECTION
+    // =============================================================
+
     private void resetForNewSelection() {
 
         if (marketName != null) {
@@ -868,6 +1389,7 @@ public class MainActivity extends Activity {
         clearTradeLevels();
 
         if (connectionStatus != null) {
+
             connectionStatus.setText(
                     "●  READY "
                             + selectedMarket
@@ -881,6 +1403,10 @@ public class MainActivity extends Activity {
         }
     }
 
+    // =============================================================
+    // DASHBOARD
+    // =============================================================
+
     private void updateDashboard(
             Signal signal
     ) {
@@ -889,10 +1415,6 @@ public class MainActivity extends Activity {
             return;
         }
 
-        /*
-         * Ignore an old response if the user has
-         * already selected another market/timeframe.
-         */
         if (!selectedMarket.equals(
                 signal.getSymbol()
         )) {
@@ -906,6 +1428,7 @@ public class MainActivity extends Activity {
         }
 
         if (marketName != null) {
+
             marketName.setText(
                     signal.getSymbol()
             );
@@ -1102,6 +1625,10 @@ public class MainActivity extends Activity {
         }
     }
 
+    // =============================================================
+    // FORMATTING
+    // =============================================================
+
     private String formatPrice(
             String symbol,
             double value
@@ -1113,7 +1640,9 @@ public class MainActivity extends Activity {
             return "--";
         }
 
-        if ("USD/JPY".equalsIgnoreCase(symbol)) {
+        if ("USD/JPY".equalsIgnoreCase(
+                symbol
+        )) {
 
             return String.format(
                     Locale.US,
@@ -1122,7 +1651,9 @@ public class MainActivity extends Activity {
             );
         }
 
-        if ("XAU/USD".equalsIgnoreCase(symbol)) {
+        if ("XAU/USD".equalsIgnoreCase(
+                symbol
+        )) {
 
             return String.format(
                     Locale.US,
@@ -1137,6 +1668,10 @@ public class MainActivity extends Activity {
                 value
         );
     }
+
+    // =============================================================
+    // UI HELPERS
+    // =============================================================
 
     private TextView createText(
             String text,
@@ -1181,6 +1716,50 @@ public class MainActivity extends Activity {
                 MUTED,
                 true
         );
+    }
+
+    private TextView createSessionRow(
+            String name
+    ) {
+
+        TextView view =
+                createText(
+                        "●  "
+                                + name
+                                + "     CHECKING...",
+                        13,
+                        MUTED,
+                        true
+                );
+
+        view.setPadding(
+                14,
+                13,
+                14,
+                13
+        );
+
+        GradientDrawable background =
+                new GradientDrawable();
+
+        background.setColor(
+                Color.rgb(10, 16, 25)
+        );
+
+        background.setStroke(
+                1,
+                CARD_BORDER
+        );
+
+        background.setCornerRadius(
+                12
+        );
+
+        view.setBackground(
+                background
+        );
+
+        return view;
     }
 
     private Spinner createSpinner(
@@ -1445,6 +2024,10 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+
+        clockHandler.removeCallbacks(
+                clockRunnable
+        );
 
         if (signalRepository != null) {
             signalRepository.stop();
