@@ -94,12 +94,12 @@ public class MainActivity extends Activity {
 
     private void connectToMarketData() {
 
-        String accessToken =
-                AppConfig.getOandaAccessToken();
+        String apiKey =
+                AppConfig.getTwelveDataApiKey();
 
         MarketDataProvider provider =
-                new OandaDataProvider(
-                        accessToken
+                new TwelveDataProvider(
+                        apiKey
                 );
 
         signalRepository =
@@ -115,7 +115,7 @@ public class MainActivity extends Activity {
                                 runOnUiThread(() -> {
 
                                     statusText.setText(
-                                            "MARKET DATA CONNECTED\n"
+                                            "TWELVE DATA CONNECTED\n"
                                                     + signal.getSymbol()
                                                     + " • "
                                                     + signal.getTimeframe()
