@@ -10,27 +10,42 @@ public class MarketDataManager {
         void onError(String message);
     }
 
-    private MarketDataCallback callback;
+    private final MarketDataProvider provider;
 
-    public MarketDataManager(MarketDataCallback callback) {
-        this.callback = callback;
+    public MarketDataManager(MarketDataProvider provider) {
+        this.provider = provider;
     }
 
-    public void requestCandles(String symbol, String timeframe) {
-        /*
-         * The real market-data provider will be connected here.
-         *
-         * IMPORTANT:
-         * No fake prices or fake candles are generated.
-         * If live data is unavailable, the app reports an error
-         * instead of creating a fake signal.
-         */
-        if (callback != null) {
-            callback.onError("LIVE DATA PROVIDER NOT CONNECTED");
+    public void requestCandles(
+            String symbol,
+            String timeframe,
+            MarketDataCallback callback
+    ) {
+        if (provider == null) {
+            callback.onError("LIVE DATA PROVIDER NOT CONFIGURED");
+            return;
         }
+
+        if (symbol == null || symbol.trim().isEmpty()) {
+            callback.onError("INVALID MARKET SYMBOL");
+            return;
+        }
+
+        if (timeframe == null || timeframe.trim().isEmpty()) {
+            callback.onError("INVALID TIMEFRAME");
+            return;
+        }
+
+        provider.requestCandles(
+                symbol,
+                timeframe,
+                callback
+        );
     }
 
     public void stop() {
-        callback = null;
+        if (provider != null) {
+            provider.stop();
+        }
     }
 }
