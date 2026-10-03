@@ -17,9 +17,7 @@ import android.widget.ScrollView;
 import android.widget.Spinner;
 import android.widget.TextView;
 
-import java.time.DayOfWeek;
 import java.time.Instant;
-import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
@@ -34,11 +32,6 @@ public class MainActivity extends Activity {
     private TextView dateText;
     private TextView marketStatusText;
     private TextView nextOpenText;
-
-    private TextView sydneyStatusText;
-    private TextView tokyoStatusText;
-    private TextView londonStatusText;
-    private TextView newYorkStatusText;
 
     private TextView marketName;
     private TextView priceText;
@@ -164,9 +157,7 @@ public class MainActivity extends Activity {
 
         scrollView.addView(root);
 
-        // =========================================================
         // HEADER
-        // =========================================================
 
         LinearLayout header =
                 new LinearLayout(this);
@@ -215,21 +206,10 @@ public class MainActivity extends Activity {
                 params(0)
         );
 
-        // =========================================================
-        // LIVE CLOCK + MARKET STATUS
-        // =========================================================
+        // LIVE CLOCK CARD
 
         LinearLayout clockCard =
                 createCard();
-
-        TextView clockLabel =
-                createSmallLabel(
-                        "LOCAL MARKET CLOCK"
-                );
-
-        clockCard.addView(
-                clockLabel
-        );
 
         clockText =
                 createText(
@@ -244,8 +224,7 @@ public class MainActivity extends Activity {
         );
 
         clockCard.addView(
-                clockText,
-                params(8)
+                clockText
         );
 
         dateText =
@@ -262,13 +241,13 @@ public class MainActivity extends Activity {
 
         clockCard.addView(
                 dateText,
-                params(4)
+                params(5)
         );
 
         marketStatusText =
                 createText(
-                        "●  CHECKING FOREX MARKET",
-                        17,
+                        "●  CHECKING MARKET",
+                        16,
                         YELLOW,
                         true
                 );
@@ -279,12 +258,12 @@ public class MainActivity extends Activity {
 
         clockCard.addView(
                 marketStatusText,
-                params(14)
+                params(12)
         );
 
         nextOpenText =
                 createText(
-                        "CHECKING MARKET HOURS...",
+                        "NEXT OPEN: --",
                         11,
                         MUTED,
                         false
@@ -304,112 +283,7 @@ public class MainActivity extends Activity {
                 params(18)
         );
 
-        // =========================================================
-        // CONNECTION STATUS
-        // =========================================================
-
-        LinearLayout connectionCard =
-                createCard();
-
-        connectionStatus =
-                createText(
-                        "●  CHECKING LIVE DATA...",
-                        12,
-                        YELLOW,
-                        true
-                );
-
-        connectionStatus.setGravity(
-                Gravity.CENTER
-        );
-
-        connectionCard.addView(
-                connectionStatus
-        );
-
-        root.addView(
-                connectionCard,
-                params(12)
-        );
-
-        // =========================================================
-        // FOREX SESSIONS
-        // =========================================================
-
-        LinearLayout sessionsCard =
-                createCard();
-
-        sessionsCard.addView(
-                createSmallLabel(
-                        "FOREX SESSIONS • SAST"
-                )
-        );
-
-        TextView sessionDescription =
-                createText(
-                        "Live global trading session monitor",
-                        11,
-                        MUTED,
-                        false
-                );
-
-        sessionsCard.addView(
-                sessionDescription,
-                params(4)
-        );
-
-        sydneyStatusText =
-                createSessionRow(
-                        "SYDNEY",
-                        "Australia/Sydney"
-                );
-
-        tokyoStatusText =
-                createSessionRow(
-                        "TOKYO",
-                        "Asia/Tokyo"
-                );
-
-        londonStatusText =
-                createSessionRow(
-                        "LONDON",
-                        "Europe/London"
-                );
-
-        newYorkStatusText =
-                createSessionRow(
-                        "NEW YORK",
-                        "America/New_York"
-                );
-
-        sessionsCard.addView(
-                sydneyStatusText,
-                params(10)
-        );
-
-        sessionsCard.addView(
-                tokyoStatusText,
-                params(6)
-        );
-
-        sessionsCard.addView(
-                londonStatusText,
-                params(6)
-        );
-
-        sessionsCard.addView(
-                newYorkStatusText,
-                params(6)
-        );
-
-        root.addView(
-                sessionsCard,
-                params(14)
-        );
-
-        // =========================================================
         // MARKET SELECTOR
-        // =========================================================
 
         LinearLayout marketSelector =
                 createCard();
@@ -456,9 +330,7 @@ public class MainActivity extends Activity {
                 params(14)
         );
 
-        // =========================================================
-        // LIVE MARKET
-        // =========================================================
+        // LIVE MARKET CARD
 
         LinearLayout priceCard =
                 createCard();
@@ -508,9 +380,7 @@ public class MainActivity extends Activity {
                 params(14)
         );
 
-        // =========================================================
-        // AI SIGNAL
-        // =========================================================
+        // SIGNAL CARD
 
         LinearLayout signalCard =
                 createCard();
@@ -560,9 +430,7 @@ public class MainActivity extends Activity {
                 params(14)
         );
 
-        // =========================================================
         // MARKET ANALYSIS
-        // =========================================================
 
         LinearLayout indicatorsCard =
                 createCard();
@@ -638,9 +506,7 @@ public class MainActivity extends Activity {
                 params(14)
         );
 
-        // =========================================================
         // TRADE PLAN
-        // =========================================================
 
         LinearLayout tradeCard =
                 createCard();
@@ -711,9 +577,7 @@ public class MainActivity extends Activity {
                 params(14)
         );
 
-        // =========================================================
         // MULTI-TIMEFRAME
-        // =========================================================
 
         LinearLayout mtfCard =
                 createCard();
@@ -725,7 +589,9 @@ public class MainActivity extends Activity {
         );
 
         HorizontalScrollView horizontal =
-                new HorizontalScrollView(this);
+                new HorizontalScrollView(
+                        this
+                );
 
         horizontal.setHorizontalScrollBarEnabled(
                 false
@@ -754,9 +620,7 @@ public class MainActivity extends Activity {
                             label
                     );
 
-            timeframeRow.addView(
-                    box
-            );
+            timeframeRow.addView(box);
         }
 
         horizontal.addView(
@@ -773,9 +637,7 @@ public class MainActivity extends Activity {
                 params(14)
         );
 
-        // =========================================================
         // SCAN BUTTON
-        // =========================================================
 
         scanButton =
                 new Button(this);
@@ -832,9 +694,7 @@ public class MainActivity extends Activity {
                 params(18)
         );
 
-        // =========================================================
         // FOOTER
-        // =========================================================
 
         TextView footer =
                 createText(
@@ -853,9 +713,7 @@ public class MainActivity extends Activity {
                 params(18)
         );
 
-        // =========================================================
         // MARKET SELECTION
-        // =========================================================
 
         marketSpinner.setOnItemSelectedListener(
                 new AdapterView.OnItemSelectedListener() {
@@ -888,9 +746,7 @@ public class MainActivity extends Activity {
                 }
         );
 
-        // =========================================================
         // TIMEFRAME SELECTION
-        // =========================================================
 
         timeframeSpinner.setOnItemSelectedListener(
                 new AdapterView.OnItemSelectedListener() {
@@ -928,10 +784,6 @@ public class MainActivity extends Activity {
                 scrollView
         );
     }
-
-    // =============================================================
-    // MARKET CLOCK
-    // =============================================================
 
     private void updateMarketClock() {
 
@@ -1050,35 +902,11 @@ public class MainActivity extends Activity {
             }
         }
 
-        // Update all four trading sessions.
-        updateSessionDisplay(
-                sydneyStatusText,
-                "Australia/Sydney",
-                8,
-                17
-        );
-
-        updateSessionDisplay(
-                tokyoStatusText,
-                "Asia/Tokyo",
-                9,
-                18
-        );
-
-        updateSessionDisplay(
-                londonStatusText,
-                "Europe/London",
-                8,
-                17
-        );
-
-        updateSessionDisplay(
-                newYorkStatusText,
-                "America/New_York",
-                8,
-                17
-        );
-
+        /*
+         * If the market has just changed from OPEN
+         * to CLOSED, immediately clear the dashboard
+         * so old signals cannot remain visible.
+         */
         if (lastMarketOpenState
                 && !marketOpen) {
 
@@ -1088,6 +916,9 @@ public class MainActivity extends Activity {
         lastMarketOpenState =
                 marketOpen;
 
+        /*
+         * Disable scanning while the market is closed.
+         */
         if (scanButton != null) {
 
             scanButton.setEnabled(
@@ -1108,157 +939,6 @@ public class MainActivity extends Activity {
             }
         }
     }
-
-    // =============================================================
-    // SESSION STATUS
-    // =============================================================
-
-    private void updateSessionDisplay(
-            TextView view,
-            String zoneName,
-            int openHour,
-            int closeHour
-    ) {
-
-        if (view == null) {
-            return;
-        }
-
-        Instant now =
-                Instant.now();
-
-        ZoneId zone =
-                ZoneId.of(
-                        zoneName
-                );
-
-        ZonedDateTime localTime =
-                now.atZone(zone);
-
-        DayOfWeek day =
-                localTime.getDayOfWeek();
-
-        LocalTime time =
-                localTime.toLocalTime();
-
-        boolean weekday =
-                day != DayOfWeek.SATURDAY
-                        && day != DayOfWeek.SUNDAY;
-
-        boolean open =
-                weekday
-                        && !time.isBefore(
-                        LocalTime.of(
-                                openHour,
-                                0
-                        )
-                )
-                        && time.isBefore(
-                        LocalTime.of(
-                                closeHour,
-                                0
-                        )
-                );
-
-        String sessionName =
-                getSessionName(
-                        zoneName
-                );
-
-        String sastTime =
-                now.atZone(
-                        ZoneId.of(
-                                "Africa/Johannesburg"
-                        )
-                )
-                .format(
-                        DateTimeFormatter.ofPattern(
-                                "HH:mm"
-                        )
-                );
-
-        if (open) {
-
-            view.setText(
-                    "●  "
-                            + sessionName
-                            + "     OPEN"
-                            + "\n"
-                            + "    Local "
-                            + localTime.format(
-                            DateTimeFormatter.ofPattern(
-                                    "HH:mm"
-                            )
-                    )
-                            + "     •     SAST "
-                            + sastTime
-            );
-
-            view.setTextColor(
-                    GREEN
-            );
-
-        } else {
-
-            view.setText(
-                    "●  "
-                            + sessionName
-                            + "     CLOSED"
-                            + "\n"
-                            + "    Local "
-                            + localTime.format(
-                            DateTimeFormatter.ofPattern(
-                                    "HH:mm"
-                            )
-                    )
-                            + "     •     SAST "
-                            + sastTime
-            );
-
-            view.setTextColor(
-                    MUTED
-            );
-        }
-    }
-
-    private String getSessionName(
-            String zoneName
-    ) {
-
-        if ("Australia/Sydney".equals(
-                zoneName
-        )) {
-
-            return "SYDNEY";
-        }
-
-        if ("Asia/Tokyo".equals(
-                zoneName
-        )) {
-
-            return "TOKYO";
-        }
-
-        if ("Europe/London".equals(
-                zoneName
-        )) {
-
-            return "LONDON";
-        }
-
-        if ("America/New_York".equals(
-                zoneName
-        )) {
-
-            return "NEW YORK";
-        }
-
-        return "SESSION";
-    }
-
-    // =============================================================
-    // MARKET CLOSED STATE
-    // =============================================================
 
     private void showMarketClosedState() {
 
@@ -1323,10 +1003,6 @@ public class MainActivity extends Activity {
         clearTradeLevels();
     }
 
-    // =============================================================
-    // DATA CONNECTION
-    // =============================================================
-
     private void connectToMarketData() {
 
         String apiKey =
@@ -1350,6 +1026,10 @@ public class MainActivity extends Activity {
                                 runOnUiThread(
                                         () -> {
 
+                                            /*
+                                             * Never display a signal
+                                             * while the market is closed.
+                                             */
                                             if (!MarketClock.isForexOpen(
                                                     Instant.now()
                                             )) {
@@ -1429,16 +1109,17 @@ public class MainActivity extends Activity {
         requestCurrentSignal();
     }
 
-    // =============================================================
-    // REQUEST SIGNAL
-    // =============================================================
-
     private void requestCurrentSignal() {
 
         if (signalRepository == null) {
             return;
         }
 
+        /*
+         * HARD SAFETY GATE:
+         * No signal request is sent while Forex
+         * is closed.
+         */
         if (!MarketClock.isForexOpen(
                 Instant.now()
         )) {
@@ -1483,10 +1164,6 @@ public class MainActivity extends Activity {
                 timeframeToScan
         );
     }
-
-    // =============================================================
-    // RESET SELECTION
-    // =============================================================
 
     private void resetForNewSelection() {
 
@@ -1569,10 +1246,6 @@ public class MainActivity extends Activity {
         }
     }
 
-    // =============================================================
-    // UPDATE DASHBOARD
-    // =============================================================
-
     private void updateDashboard(
             Signal signal
     ) {
@@ -1581,6 +1254,10 @@ public class MainActivity extends Activity {
             return;
         }
 
+        /*
+         * Protect against an old response arriving
+         * after the user changed the selected pair.
+         */
         if (!selectedMarket.equals(
                 signal.getSymbol()
         )) {
@@ -1760,10 +1437,6 @@ public class MainActivity extends Activity {
         }
     }
 
-    // =============================================================
-    // CLEAR TRADE LEVELS
-    // =============================================================
-
     private void clearTradeLevels() {
 
         if (entryText != null) {
@@ -1801,10 +1474,6 @@ public class MainActivity extends Activity {
             );
         }
     }
-
-    // =============================================================
-    // PRICE FORMAT
-    // =============================================================
 
     private String formatPrice(
             String symbol,
@@ -1845,10 +1514,6 @@ public class MainActivity extends Activity {
                 value
         );
     }
-
-    // =============================================================
-    // UI HELPERS
-    // =============================================================
 
     private TextView createText(
             String text,
@@ -1895,58 +1560,6 @@ public class MainActivity extends Activity {
         );
     }
 
-    // =============================================================
-    // SESSION ROW
-    // =============================================================
-
-    private TextView createSessionRow(
-            String sessionName,
-            String zoneName
-    ) {
-
-        TextView view =
-                createText(
-                        sessionName
-                                + "     CHECKING...",
-                        13,
-                        MUTED,
-                        true
-                );
-
-        view.setPadding(
-                14,
-                13,
-                14,
-                13
-        );
-
-        GradientDrawable background =
-                new GradientDrawable();
-
-        background.setColor(
-                Color.rgb(10, 16, 25)
-        );
-
-        background.setStroke(
-                1,
-                CARD_BORDER
-        );
-
-        background.setCornerRadius(
-                12
-        );
-
-        view.setBackground(
-                background
-        );
-
-        return view;
-    }
-
-    // =============================================================
-    // SPINNER
-    // =============================================================
-
     private Spinner createSpinner(
             String[] values
     ) {
@@ -1971,10 +1584,6 @@ public class MainActivity extends Activity {
 
         return spinner;
     }
-
-    // =============================================================
-    // METRIC
-    // =============================================================
 
     private TextView createMetric(
             String label,
@@ -2023,10 +1632,6 @@ public class MainActivity extends Activity {
         return view;
     }
 
-    // =============================================================
-    // TRADE ROW
-    // =============================================================
-
     private TextView createTradeRow(
             String label,
             int color
@@ -2065,10 +1670,6 @@ public class MainActivity extends Activity {
 
         return view;
     }
-
-    // =============================================================
-    // TIMEFRAME BOX
-    // =============================================================
 
     private TextView createTimeframeBox(
             String text
@@ -2133,10 +1734,6 @@ public class MainActivity extends Activity {
         return view;
     }
 
-    // =============================================================
-    // METRIC ROW
-    // =============================================================
-
     private LinearLayout createMetricRow() {
 
         LinearLayout row =
@@ -2148,10 +1745,6 @@ public class MainActivity extends Activity {
 
         return row;
     }
-
-    // =============================================================
-    // CARD
-    // =============================================================
 
     private LinearLayout createCard() {
 
@@ -2192,10 +1785,6 @@ public class MainActivity extends Activity {
         return card;
     }
 
-    // =============================================================
-    // LAYOUT PARAMS
-    // =============================================================
-
     private LinearLayout.LayoutParams params(
             int topMargin
     ) {
@@ -2230,10 +1819,6 @@ public class MainActivity extends Activity {
 
         return layoutParams;
     }
-
-    // =============================================================
-    // DESTROY
-    // =============================================================
 
     @Override
     protected void onDestroy() {
