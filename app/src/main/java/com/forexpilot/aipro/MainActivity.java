@@ -3,15 +3,17 @@ package com.forexpilot.aipro;
 import android.app.Activity;
 import android.graphics.Color;
 import android.graphics.Typeface;
+import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.view.Gravity;
 import android.view.View;
+import android.widget.AdapterView;
+import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.HorizontalScrollView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.Spinner;
-import android.widget.ArrayAdapter;
 import android.widget.TextView;
 
 import java.util.Locale;
@@ -59,6 +61,33 @@ public class MainActivity extends Activity {
             "1D"
     };
 
+    private final int BACKGROUND =
+            Color.rgb(7, 11, 18);
+
+    private final int CARD =
+            Color.rgb(15, 22, 33);
+
+    private final int CARD_BORDER =
+            Color.rgb(35, 47, 64);
+
+    private final int WHITE =
+            Color.rgb(245, 248, 252);
+
+    private final int MUTED =
+            Color.rgb(145, 158, 175);
+
+    private final int GREEN =
+            Color.rgb(40, 220, 125);
+
+    private final int RED =
+            Color.rgb(255, 80, 90);
+
+    private final int YELLOW =
+            Color.rgb(255, 195, 70);
+
+    private final int BLUE =
+            Color.rgb(70, 150, 255);
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -69,110 +98,152 @@ public class MainActivity extends Activity {
 
     private void buildDashboard() {
 
-        ScrollView scrollView = new ScrollView(this);
+        ScrollView scrollView =
+                new ScrollView(this);
 
         scrollView.setBackgroundColor(
-                Color.rgb(8, 12, 20)
+                BACKGROUND
         );
 
-        LinearLayout root = new LinearLayout(this);
+        LinearLayout root =
+                new LinearLayout(this);
 
         root.setOrientation(
                 LinearLayout.VERTICAL
         );
 
         root.setPadding(
+                18,
                 24,
-                28,
-                24,
-                40
+                18,
+                32
         );
 
         scrollView.addView(root);
 
+        // -------------------------------------------------
         // HEADER
+        // -------------------------------------------------
 
-        TextView title = createText(
-                "ForexPilot AI Pro",
-                28,
-                Color.WHITE,
-                true
-        );
-
-        title.setGravity(Gravity.CENTER);
-
-        root.addView(
-                title,
-                fullWidthParams(0)
-        );
-
-        TextView subtitle = createText(
-                "REAL-TIME FOREX SIGNAL INTELLIGENCE",
-                12,
-                Color.LTGRAY,
-                true
-        );
-
-        subtitle.setGravity(Gravity.CENTER);
-
-        root.addView(
-                subtitle,
-                fullWidthParams(8)
-        );
-
-        connectionStatus = createText(
-                "●  CONNECTING TO LIVE MARKET DATA",
-                14,
-                Color.YELLOW,
-                true
-        );
-
-        connectionStatus.setGravity(Gravity.CENTER);
-
-        root.addView(
-                connectionStatus,
-                fullWidthParams(18)
-        );
-
-        // MARKET SELECTORS
-
-        LinearLayout selectorRow =
+        LinearLayout header =
                 new LinearLayout(this);
 
-        selectorRow.setOrientation(
-                LinearLayout.HORIZONTAL
+        header.setOrientation(
+                LinearLayout.VERTICAL
+        );
+
+        header.setGravity(
+                Gravity.CENTER
+        );
+
+        TextView title =
+                createText(
+                        "FOREXPILOT",
+                        30,
+                        WHITE,
+                        true
+                );
+
+        title.setGravity(
+                Gravity.CENTER
+        );
+
+        header.addView(title);
+
+        TextView pro =
+                createText(
+                        "AI PRO  •  SIGNAL INTELLIGENCE",
+                        12,
+                        BLUE,
+                        true
+                );
+
+        pro.setGravity(
+                Gravity.CENTER
+        );
+
+        header.addView(
+                pro,
+                params(6)
+        );
+
+        connectionStatus =
+                createText(
+                        "●  CONNECTING",
+                        13,
+                        YELLOW,
+                        true
+                );
+
+        connectionStatus.setGravity(
+                Gravity.CENTER
+        );
+
+        header.addView(
+                connectionStatus,
+                params(14)
+        );
+
+        root.addView(
+                header,
+                params(0)
+        );
+
+        // -------------------------------------------------
+        // MARKET SELECTOR CARD
+        // -------------------------------------------------
+
+        LinearLayout marketSelector =
+                createCard();
+
+        marketSelector.addView(
+                createSmallLabel(
+                        "MARKET"
+                )
         );
 
         marketSpinner =
-                createSpinner(markets);
+                createSpinner(
+                        markets
+                );
 
-        timeframeSpinner =
-                createSpinner(timeframes);
+        marketSpinner.setSelection(1);
 
-        selectorRow.addView(
+        marketSelector.addView(
                 marketSpinner,
-                weightParams()
+                params(6)
         );
 
-        selectorRow.addView(
+        marketSelector.addView(
+                createSmallLabel(
+                        "TIMEFRAME"
+                ),
+                params(14)
+        );
+
+        timeframeSpinner =
+                createSpinner(
+                        timeframes
+                );
+
+        timeframeSpinner.setSelection(1);
+
+        marketSelector.addView(
                 timeframeSpinner,
-                weightParams()
+                params(6)
         );
 
         root.addView(
-                selectorRow,
-                fullWidthParams(18)
+                marketSelector,
+                params(18)
         );
 
-        marketSpinner.setSelection(1);
-        timeframeSpinner.setSelection(1);
-
         marketSpinner.setOnItemSelectedListener(
-                new android.widget.AdapterView.OnItemSelectedListener() {
+                new AdapterView.OnItemSelectedListener() {
 
                     @Override
                     public void onItemSelected(
-                            android.widget.AdapterView<?> parent,
+                            AdapterView<?> parent,
                             View view,
                             int position,
                             long id
@@ -184,18 +255,18 @@ public class MainActivity extends Activity {
 
                     @Override
                     public void onNothingSelected(
-                            android.widget.AdapterView<?> parent
+                            AdapterView<?> parent
                     ) {
                     }
                 }
         );
 
         timeframeSpinner.setOnItemSelectedListener(
-                new android.widget.AdapterView.OnItemSelectedListener() {
+                new AdapterView.OnItemSelectedListener() {
 
                     @Override
                     public void onItemSelected(
-                            android.widget.AdapterView<?> parent,
+                            AdapterView<?> parent,
                             View view,
                             int position,
                             long id
@@ -207,145 +278,288 @@ public class MainActivity extends Activity {
 
                     @Override
                     public void onNothingSelected(
-                            android.widget.AdapterView<?> parent
+                            AdapterView<?> parent
                     ) {
                     }
                 }
         );
 
-        // MARKET CARD
+        // -------------------------------------------------
+        // PRICE CARD
+        // -------------------------------------------------
 
-        LinearLayout marketCard =
+        LinearLayout priceCard =
                 createCard();
 
-        TextView marketTitle =
-                createSectionTitle("MARKET");
-
-        marketCard.addView(marketTitle);
-
-        priceText =
-                createValueText(
-                        "Current Price: --"
-                );
-
-        marketCard.addView(priceText);
-
-        root.addView(
-                marketCard,
-                fullWidthParams(18)
+        priceCard.addView(
+                createSmallLabel(
+                        "LIVE MARKET"
+                )
         );
 
+        TextView marketName =
+                createText(
+                        "EUR/USD",
+                        24,
+                        WHITE,
+                        true
+                );
+
+        marketName.setGravity(
+                Gravity.CENTER
+        );
+
+        priceCard.addView(
+                marketName,
+                params(8)
+        );
+
+        priceText =
+                createText(
+                        "PRICE  --",
+                        19,
+                        BLUE,
+                        true
+                );
+
+        priceText.setGravity(
+                Gravity.CENTER
+        );
+
+        priceCard.addView(
+                priceText,
+                params(5)
+        );
+
+        root.addView(
+                priceCard,
+                params(14)
+        );
+
+        // -------------------------------------------------
         // SIGNAL CARD
+        // -------------------------------------------------
 
         LinearLayout signalCard =
                 createCard();
 
         signalCard.addView(
-                createSectionTitle(
+                createSmallLabel(
                         "AI SIGNAL"
                 )
         );
 
         signalText =
-                createSignalText(
-                        "WAIT"
+                createText(
+                        "WAIT",
+                        38,
+                        YELLOW,
+                        true
                 );
+
+        signalText.setGravity(
+                Gravity.CENTER
+        );
 
         signalCard.addView(
                 signalText,
-                fullWidthParams(8)
+                params(8)
         );
 
-        trendText =
-                createValueText(
-                        "Trend: --"
+        TextView signalDescription =
+                createText(
+                        "Technical market analysis",
+                        12,
+                        MUTED,
+                        false
                 );
 
-        rsiText =
-                createValueText(
-                        "RSI: --"
-                );
+        signalDescription.setGravity(
+                Gravity.CENTER
+        );
 
-        atrText =
-                createValueText(
-                        "ATR: --"
-                );
-
-        momentumText =
-                createValueText(
-                        "Momentum: --"
-                );
-
-        signalCard.addView(trendText);
-        signalCard.addView(rsiText);
-        signalCard.addView(atrText);
-        signalCard.addView(momentumText);
+        signalCard.addView(
+                signalDescription,
+                params(3)
+        );
 
         root.addView(
                 signalCard,
-                fullWidthParams(18)
+                params(14)
         );
 
-        // TRADE PLAN
+        // -------------------------------------------------
+        // INDICATORS CARD
+        // -------------------------------------------------
+
+        LinearLayout indicatorsCard =
+                createCard();
+
+        indicatorsCard.addView(
+                createSmallLabel(
+                        "MARKET ANALYSIS"
+                )
+        );
+
+        LinearLayout row1 =
+                createMetricRow();
+
+        trendText =
+                createMetric(
+                        "TREND",
+                        "--"
+                );
+
+        rsiText =
+                createMetric(
+                        "RSI",
+                        "--"
+                );
+
+        row1.addView(
+                trendText,
+                weightParams()
+        );
+
+        row1.addView(
+                rsiText,
+                weightParams()
+        );
+
+        indicatorsCard.addView(
+                row1,
+                params(10)
+        );
+
+        LinearLayout row2 =
+                createMetricRow();
+
+        atrText =
+                createMetric(
+                        "ATR",
+                        "--"
+                );
+
+        momentumText =
+                createMetric(
+                        "TIMEFRAME",
+                        "--"
+                );
+
+        row2.addView(
+                atrText,
+                weightParams()
+        );
+
+        row2.addView(
+                momentumText,
+                weightParams()
+        );
+
+        indicatorsCard.addView(
+                row2,
+                params(8)
+        );
+
+        root.addView(
+                indicatorsCard,
+                params(14)
+        );
+
+        // -------------------------------------------------
+        // TRADE PLAN CARD
+        // -------------------------------------------------
 
         LinearLayout tradeCard =
                 createCard();
 
         tradeCard.addView(
-                createSectionTitle(
+                createSmallLabel(
                         "TRADE PLAN"
                 )
         );
 
         entryText =
-                createTradeLine(
-                        "ENTRY"
+                createTradeRow(
+                        "ENTRY",
+                        BLUE
                 );
 
         stopLossText =
-                createTradeLine(
-                        "STOP LOSS"
+                createTradeRow(
+                        "STOP LOSS",
+                        RED
                 );
 
         tp1Text =
-                createTradeLine(
-                        "TP1"
+                createTradeRow(
+                        "TAKE PROFIT 1",
+                        GREEN
                 );
 
         tp2Text =
-                createTradeLine(
-                        "TP2"
+                createTradeRow(
+                        "TAKE PROFIT 2",
+                        GREEN
                 );
 
         tp3Text =
-                createTradeLine(
-                        "TP3"
+                createTradeRow(
+                        "TAKE PROFIT 3",
+                        GREEN
                 );
 
-        tradeCard.addView(entryText);
-        tradeCard.addView(stopLossText);
-        tradeCard.addView(tp1Text);
-        tradeCard.addView(tp2Text);
-        tradeCard.addView(tp3Text);
+        tradeCard.addView(
+                entryText,
+                params(10)
+        );
+
+        tradeCard.addView(
+                stopLossText,
+                params(5)
+        );
+
+        tradeCard.addView(
+                tp1Text,
+                params(5)
+        );
+
+        tradeCard.addView(
+                tp2Text,
+                params(5)
+        );
+
+        tradeCard.addView(
+                tp3Text,
+                params(5)
+        );
 
         root.addView(
                 tradeCard,
-                fullWidthParams(18)
+                params(14)
         );
 
-        // MULTI TIMEFRAME
+        // -------------------------------------------------
+        // MULTI-TIMEFRAME CARD
+        // -------------------------------------------------
 
-        LinearLayout timeframeCard =
+        LinearLayout mtfCard =
                 createCard();
 
-        timeframeCard.addView(
-                createSectionTitle(
+        mtfCard.addView(
+                createSmallLabel(
                         "MULTI-TIMEFRAME"
                 )
         );
 
         HorizontalScrollView horizontal =
-                new HorizontalScrollView(this);
+                new HorizontalScrollView(
+                        this
+                );
+
+        horizontal.setHorizontalScrollBarEnabled(
+                false
+        );
 
         LinearLayout timeframeRow =
                 new LinearLayout(this);
@@ -366,21 +580,30 @@ public class MainActivity extends Activity {
         for (String label : labels) {
 
             TextView box =
-                    createTimeframeBox(label);
+                    createTimeframeBox(
+                            label
+                    );
 
             timeframeRow.addView(box);
         }
 
-        horizontal.addView(timeframeRow);
-
-        timeframeCard.addView(horizontal);
-
-        root.addView(
-                timeframeCard,
-                fullWidthParams(18)
+        horizontal.addView(
+                timeframeRow
         );
 
+        mtfCard.addView(
+                horizontal,
+                params(10)
+        );
+
+        root.addView(
+                mtfCard,
+                params(14)
+        );
+
+        // -------------------------------------------------
         // SCAN BUTTON
+        // -------------------------------------------------
 
         scanButton =
                 new Button(this);
@@ -389,18 +612,44 @@ public class MainActivity extends Activity {
                 "SCAN MARKET"
         );
 
-        scanButton.setTextSize(15);
+        scanButton.setTextSize(
+                15
+        );
+
+        scanButton.setTextColor(
+                WHITE
+        );
 
         scanButton.setTypeface(
                 Typeface.DEFAULT,
                 Typeface.BOLD
         );
 
-        scanButton.setTextColor(
-                Color.WHITE
+        scanButton.setAllCaps(
+                false
         );
 
-        scanButton.setAllCaps(false);
+        scanButton.setPadding(
+                20,
+                15,
+                20,
+                15
+        );
+
+        GradientDrawable buttonBackground =
+                new GradientDrawable();
+
+        buttonBackground.setColor(
+                Color.rgb(25, 95, 180)
+        );
+
+        buttonBackground.setCornerRadius(
+                18
+        );
+
+        scanButton.setBackground(
+                buttonBackground
+        );
 
         scanButton.setOnClickListener(
                 view -> requestCurrentSignal()
@@ -408,16 +657,18 @@ public class MainActivity extends Activity {
 
         root.addView(
                 scanButton,
-                fullWidthParams(20)
+                params(18)
         );
 
+        // -------------------------------------------------
         // FOOTER
+        // -------------------------------------------------
 
         TextView footer =
                 createText(
-                        "Live data only • No fabricated signals",
-                        11,
-                        Color.GRAY,
+                        "FOREXPILOT AI PRO\nLIVE DATA • TECHNICAL ANALYSIS • REAL-TIME SIGNALS",
+                        10,
+                        MUTED,
                         false
                 );
 
@@ -427,10 +678,12 @@ public class MainActivity extends Activity {
 
         root.addView(
                 footer,
-                fullWidthParams(14)
+                params(18)
         );
 
-        setContentView(scrollView);
+        setContentView(
+                scrollView
+        );
     }
 
     private void connectToMarketData() {
@@ -439,7 +692,9 @@ public class MainActivity extends Activity {
                 AppConfig.getTwelveDataApiKey();
 
         MarketDataProvider provider =
-                new TwelveDataProvider(apiKey);
+                new TwelveDataProvider(
+                        apiKey
+                );
 
         signalRepository =
                 new SignalRepository(
@@ -452,7 +707,10 @@ public class MainActivity extends Activity {
                             ) {
 
                                 runOnUiThread(
-                                        () -> updateDashboard(signal)
+                                        () ->
+                                                updateDashboard(
+                                                        signal
+                                                )
                                 );
                             }
 
@@ -469,21 +727,33 @@ public class MainActivity extends Activity {
                                             );
 
                                             connectionStatus.setTextColor(
-                                                    Color.rgb(
-                                                            255,
-                                                            90,
-                                                            90
-                                                    )
+                                                    RED
                                             );
 
                                             signalText.setText(
                                                     "WAIT"
                                             );
 
+                                            signalText.setTextColor(
+                                                    YELLOW
+                                            );
+
                                             clearTradeLevels();
 
                                             trendText.setText(
-                                                    "Trend: " + message
+                                                    "TREND\nERROR"
+                                            );
+
+                                            rsiText.setText(
+                                                    "RSI\n--"
+                                            );
+
+                                            atrText.setText(
+                                                    "ATR\n--"
+                                            );
+
+                                            momentumText.setText(
+                                                    "STATUS\nERROR"
                                             );
                                         }
                                 );
@@ -508,11 +778,15 @@ public class MainActivity extends Activity {
         );
 
         connectionStatus.setTextColor(
-                Color.YELLOW
+                YELLOW
         );
 
         signalText.setText(
                 "WAIT"
+        );
+
+        signalText.setTextColor(
+                YELLOW
         );
 
         clearTradeLevels();
@@ -536,65 +810,57 @@ public class MainActivity extends Activity {
         );
 
         connectionStatus.setTextColor(
-                Color.rgb(
-                        60,
-                        220,
-                        120
-                )
+                GREEN
         );
 
-        double entry =
-                signal.getEntry();
-
-        if (!Double.isNaN(entry)) {
+        if (!Double.isNaN(
+                signal.getEntry()
+        )) {
 
             priceText.setText(
-                    "Current Price: "
-                            + formatPrice(entry)
+                    "PRICE  "
+                            + formatPrice(
+                            signal.getEntry()
+                    )
             );
 
         } else {
 
             priceText.setText(
-                    "Current Price: --"
+                    "PRICE  --"
             );
         }
 
         signalText.setText(
-                signal.getDirection().name()
+                signal.getDirection()
+                        .name()
         );
 
         if (signal.getDirection()
                 == Signal.Direction.BUY) {
 
             signalText.setTextColor(
-                    Color.rgb(
-                            60,
-                            230,
-                            120
-                    )
+                    GREEN
             );
 
-        } else if (signal.getDirection()
-                == Signal.Direction.SELL) {
+        } else if (
+                signal.getDirection()
+                        == Signal.Direction.SELL
+        ) {
 
             signalText.setTextColor(
-                    Color.rgb(
-                            255,
-                            80,
-                            80
-                    )
+                    RED
             );
 
         } else {
 
             signalText.setTextColor(
-                    Color.YELLOW
+                    YELLOW
             );
         }
 
         trendText.setText(
-                "Trend: "
+                "TREND\n"
                         + signal.getTrend()
         );
 
@@ -603,7 +869,7 @@ public class MainActivity extends Activity {
         )) {
 
             rsiText.setText(
-                    "RSI: "
+                    "RSI\n"
                             + String.format(
                             Locale.US,
                             "%.2f",
@@ -614,7 +880,7 @@ public class MainActivity extends Activity {
         } else {
 
             rsiText.setText(
-                    "RSI: --"
+                    "RSI\n--"
             );
         }
 
@@ -623,7 +889,7 @@ public class MainActivity extends Activity {
         )) {
 
             atrText.setText(
-                    "ATR: "
+                    "ATR\n"
                             + formatPrice(
                             signal.getAtr()
                     )
@@ -632,12 +898,12 @@ public class MainActivity extends Activity {
         } else {
 
             atrText.setText(
-                    "ATR: --"
+                    "ATR\n--"
             );
         }
 
         momentumText.setText(
-                "Timeframe: "
+                "TIMEFRAME\n"
                         + signal.getTimeframe()
         );
 
@@ -647,35 +913,35 @@ public class MainActivity extends Activity {
                 == Signal.Direction.SELL) {
 
             entryText.setText(
-                    "ENTRY       "
+                    "ENTRY                         "
                             + formatPrice(
                             signal.getEntry()
                     )
             );
 
             stopLossText.setText(
-                    "STOP LOSS   "
+                    "STOP LOSS                  "
                             + formatPrice(
                             signal.getStopLoss()
                     )
             );
 
             tp1Text.setText(
-                    "TP1         "
+                    "TAKE PROFIT 1          "
                             + formatPrice(
                             signal.getTakeProfit1()
                     )
             );
 
             tp2Text.setText(
-                    "TP2         "
+                    "TAKE PROFIT 2          "
                             + formatPrice(
                             signal.getTakeProfit2()
                     )
             );
 
             tp3Text.setText(
-                    "TP3         "
+                    "TAKE PROFIT 3          "
                             + formatPrice(
                             signal.getTakeProfit3()
                     )
@@ -690,23 +956,23 @@ public class MainActivity extends Activity {
     private void clearTradeLevels() {
 
         entryText.setText(
-                "ENTRY       --"
+                "ENTRY                         --"
         );
 
         stopLossText.setText(
-                "STOP LOSS   --"
+                "STOP LOSS                  --"
         );
 
         tp1Text.setText(
-                "TP1         --"
+                "TAKE PROFIT 1          --"
         );
 
         tp2Text.setText(
-                "TP2         --"
+                "TAKE PROFIT 2          --"
         );
 
         tp3Text.setText(
-                "TP3         --"
+                "TAKE PROFIT 3          --"
         );
     }
 
@@ -737,11 +1003,20 @@ public class MainActivity extends Activity {
         TextView view =
                 new TextView(this);
 
-        view.setText(text);
-        view.setTextSize(size);
-        view.setTextColor(color);
+        view.setText(
+                text
+        );
+
+        view.setTextSize(
+                size
+        );
+
+        view.setTextColor(
+                color
+        );
 
         if (bold) {
+
             view.setTypeface(
                     Typeface.DEFAULT,
                     Typeface.BOLD
@@ -751,86 +1026,102 @@ public class MainActivity extends Activity {
         return view;
     }
 
-    private TextView createSectionTitle(
+    private TextView createSmallLabel(
             String text
     ) {
 
         TextView view =
                 createText(
                         text,
-                        15,
-                        Color.WHITE,
+                        11,
+                        MUTED,
                         true
                 );
 
-        view.setPadding(
-                0,
-                0,
-                0,
-                12
-        );
-
         return view;
     }
 
-    private TextView createValueText(
-            String text
+    private TextView createMetric(
+            String label,
+            String value
     ) {
 
         TextView view =
                 createText(
-                        text,
-                        15,
-                        Color.LTGRAY,
-                        false
-                );
-
-        view.setPadding(
-                0,
-                5,
-                0,
-                5
-        );
-
-        return view;
-    }
-
-    private TextView createTradeLine(
-            String label
-    ) {
-
-        TextView view =
-                createText(
-                        label + "       --",
-                        16,
-                        Color.WHITE,
-                        true
-                );
-
-        view.setPadding(
-                0,
-                8,
-                0,
-                8
-        );
-
-        return view;
-    }
-
-    private TextView createSignalText(
-            String text
-    ) {
-
-        TextView view =
-                createText(
-                        text,
-                        30,
-                        Color.YELLOW,
+                        label + "\n" + value,
+                        14,
+                        WHITE,
                         true
                 );
 
         view.setGravity(
                 Gravity.CENTER
+        );
+
+        view.setPadding(
+                12,
+                15,
+                12,
+                15
+        );
+
+        GradientDrawable background =
+                new GradientDrawable();
+
+        background.setColor(
+                Color.rgb(10, 16, 25)
+        );
+
+        background.setStroke(
+                1,
+                CARD_BORDER
+        );
+
+        background.setCornerRadius(
+                14
+        );
+
+        view.setBackground(
+                background
+        );
+
+        return view;
+    }
+
+    private TextView createTradeRow(
+            String label,
+            int color
+    ) {
+
+        TextView view =
+                createText(
+                        label
+                                + "                         --",
+                        14,
+                        color,
+                        true
+                );
+
+        view.setPadding(
+                14,
+                14,
+                14,
+                14
+        );
+
+        GradientDrawable background =
+                new GradientDrawable();
+
+        background.setColor(
+                Color.rgb(10, 16, 25)
+        );
+
+        background.setCornerRadius(
+                12
+        );
+
+        view.setBackground(
+                background
         );
 
         return view;
@@ -843,8 +1134,8 @@ public class MainActivity extends Activity {
         TextView view =
                 createText(
                         text,
-                        13,
-                        Color.WHITE,
+                        12,
+                        WHITE,
                         true
                 );
 
@@ -853,13 +1144,101 @@ public class MainActivity extends Activity {
         );
 
         view.setPadding(
-                22,
-                18,
-                22,
-                18
+                20,
+                14,
+                20,
+                14
+        );
+
+        GradientDrawable background =
+                new GradientDrawable();
+
+        background.setColor(
+                Color.rgb(10, 16, 25)
+        );
+
+        background.setStroke(
+                1,
+                CARD_BORDER
+        );
+
+        background.setCornerRadius(
+                14
+        );
+
+        view.setBackground(
+                background
+        );
+
+        LinearLayout.LayoutParams params =
+                new LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.WRAP_CONTENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT
+                );
+
+        params.setMargins(
+                0,
+                0,
+                8,
+                0
+        );
+
+        view.setLayoutParams(
+                params
         );
 
         return view;
+    }
+
+    private LinearLayout createMetricRow() {
+
+        LinearLayout row =
+                new LinearLayout(this);
+
+        row.setOrientation(
+                LinearLayout.HORIZONTAL
+        );
+
+        return row;
+    }
+
+    private LinearLayout createCard() {
+
+        LinearLayout card =
+                new LinearLayout(this);
+
+        card.setOrientation(
+                LinearLayout.VERTICAL
+        );
+
+        card.setPadding(
+                18,
+                18,
+                18,
+                18
+        );
+
+        GradientDrawable background =
+                new GradientDrawable();
+
+        background.setColor(
+                CARD
+        );
+
+        background.setStroke(
+                1,
+                CARD_BORDER
+        );
+
+        background.setCornerRadius(
+                18
+        );
+
+        card.setBackground(
+                background
+        );
+
+        return card;
     }
 
     private Spinner createSpinner(
@@ -880,40 +1259,16 @@ public class MainActivity extends Activity {
                 android.R.layout.simple_spinner_dropdown_item
         );
 
-        spinner.setAdapter(adapter);
+        spinner.setAdapter(
+                adapter
+        );
 
         return spinner;
     }
 
-    private LinearLayout createCard() {
-
-        LinearLayout card =
-                new LinearLayout(this);
-
-        card.setOrientation(
-                LinearLayout.VERTICAL
-        );
-
-        card.setPadding(
-                20,
-                20,
-                20,
-                20
-        );
-
-        card.setBackgroundColor(
-                Color.rgb(
-                        18,
-                        25,
-                        38
-                )
-        );
-
-        return card;
-    }
-
-    private LinearLayout.LayoutParams
-    fullWidthParams(int topMargin) {
+    private LinearLayout.LayoutParams params(
+            int topMargin
+    ) {
 
         LinearLayout.LayoutParams params =
                 new LinearLayout.LayoutParams(
@@ -921,13 +1276,13 @@ public class MainActivity extends Activity {
                         LinearLayout.LayoutParams.WRAP_CONTENT
                 );
 
-        params.topMargin = topMargin;
+        params.topMargin =
+                topMargin;
 
         return params;
     }
 
-    private LinearLayout.LayoutParams
-    weightParams() {
+    private LinearLayout.LayoutParams weightParams() {
 
         LinearLayout.LayoutParams params =
                 new LinearLayout.LayoutParams(
