@@ -13,7 +13,13 @@ android {
         versionCode 1
         versionName "1.0"
 
-        buildConfigField "String", "TWELVE_DATA_API_KEY", "\"\""
+        def twelveDataKey = project.findProperty("twelveDataApiKey") ?: ""
+
+        buildConfigField(
+                "String",
+                "TWELVE_DATA_API_KEY",
+                "\"${twelveDataKey}\""
+        )
     }
 
     buildFeatures {
