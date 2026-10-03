@@ -9,32 +9,151 @@ import android.widget.TextView;
 
 public class MainActivity extends Activity {
 
+    private SignalRepository signalRepository;
+
+    private TextView statusText;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        LinearLayout layout = new LinearLayout(this);
-        layout.setOrientation(LinearLayout.VERTICAL);
-        layout.setGravity(Gravity.CENTER);
-        layout.setPadding(40, 40, 40, 40);
-        layout.setBackgroundColor(Color.rgb(10, 15, 25));
+        buildInterface();
+        connectToMarketData();
+    }
 
-        TextView title = new TextView(this);
-        title.setText("ForexPilot AI Pro");
-        title.setTextColor(Color.WHITE);
+    private void buildInterface() {
+
+        LinearLayout layout =
+                new LinearLayout(this);
+
+        layout.setOrientation(
+                LinearLayout.VERTICAL
+        );
+
+        layout.setGravity(
+                Gravity.CENTER
+        );
+
+        layout.setPadding(
+                40,
+                40,
+                40,
+                40
+        );
+
+        layout.setBackgroundColor(
+                Color.rgb(10, 15, 25)
+        );
+
+        TextView title =
+                new TextView(this);
+
+        title.setText(
+                "ForexPilot AI Pro"
+        );
+
+        title.setTextColor(
+                Color.WHITE
+        );
+
         title.setTextSize(28);
-        title.setGravity(Gravity.CENTER);
 
-        TextView status = new TextView(this);
-        status.setText("LIVE MARKET ENGINE\nConnecting...");
-        status.setTextColor(Color.LTGRAY);
-        status.setTextSize(16);
-        status.setGravity(Gravity.CENTER);
-        status.setPadding(0, 30, 0, 0);
+        title.setGravity(
+                Gravity.CENTER
+        );
+
+        statusText =
+                new TextView(this);
+
+        statusText.setText(
+                "LIVE MARKET ENGINE\nConnecting..."
+        );
+
+        statusText.setTextColor(
+                Color.LTGRAY
+        );
+
+        statusText.setTextSize(16);
+
+        statusText.setGravity(
+                Gravity.CENTER
+        );
+
+        statusText.setPadding(
+                0,
+                30,
+                0,
+                0
+        );
 
         layout.addView(title);
-        layout.addView(status);
+        layout.addView(statusText);
 
         setContentView(layout);
+    }
+
+    private void connectToMarketData() {
+
+        String accessToken =
+                AppConfig.getOandaAccessToken();
+
+        MarketDataProvider provider =
+                new OandaDataProvider(
+                        accessToken
+                );
+
+        signalRepository =
+                new SignalRepository(
+                        provider,
+                        new SignalRepository.SignalCallback() {
+
+                            @Override
+                            public void onSignal(
+                                    Signal signal
+                            ) {
+
+                                runOnUiThread(() -> {
+
+                                    statusText.setText(
+                                            "MARKET DATA CONNECTED\n"
+                                                    + signal.getSymbol()
+                                                    + " • "
+                                                    + signal.getTimeframe()
+                                                    + "\n"
+                                                    + signal.getDirection()
+                                    );
+                                });
+                            }
+
+                            @Override
+                            public void onError(
+                                    String message
+                            ) {
+
+                                runOnUiThread(() -> {
+
+                                    statusText.setText(
+                                            "MARKET DATA STATUS\n"
+                                                    + message
+                                    );
+                                });
+                            }
+                        }
+                );
+
+        signalRepository.requestSignal(
+                "EUR/USD",
+                "15M"
+        );
+    }
+
+    @Override
+    protected void onDestroy() {
+
+        if (signalRepository != null) {
+            signalRepository.stop();
+        }
+
+        super.onDestroy();
     }
 }
