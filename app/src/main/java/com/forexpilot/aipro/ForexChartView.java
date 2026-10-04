@@ -8,6 +8,7 @@ import android.graphics.RectF;
 import android.view.MotionEvent;
 import android.view.ScaleGestureDetector;
 import android.view.View;
+import android.view.ViewParent;
 
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -31,19 +32,9 @@ public class ForexChartView extends View {
 
     private boolean moving = false;
 
-    /*
-     * Candle zoom level.
-     * This is intentionally larger than the old
-     * renderer so individual candles are easier
-     * to analyze on a phone.
-     */
     private float candleWidth = 18f;
     private float spacing = 6f;
 
-    /*
-     * 0 = latest candles.
-     * Larger values = move backwards into history.
-     */
     private float scrollOffset = 0f;
 
     private float crosshairX = -1f;
@@ -66,11 +57,6 @@ public class ForexChartView extends View {
     private static final float MIN_SPACING = 2f;
     private static final float MAX_SPACING = 14f;
 
-    /*
-     * Chart layout.
-     *
-     * The right side is reserved for the price scale.
-     */
     private static final float CHART_LEFT = 18f;
     private static final float CHART_RIGHT = 96f;
     private static final float CHART_TOP = 28f;
@@ -112,9 +98,6 @@ public class ForexChartView extends View {
                 );
     }
 
-    /*
-     * Receive real market candles.
-     */
     public void setCandles(
             List<Candle> newCandles
     ) {
@@ -125,9 +108,6 @@ public class ForexChartView extends View {
             candles.addAll(newCandles);
         }
 
-        /*
-         * Always start at the newest candles.
-         */
         scrollOffset = 0f;
 
         crosshairX = -1f;
@@ -186,9 +166,6 @@ public class ForexChartView extends View {
         invalidate();
     }
 
-    /*
-     * Existing external zoom button support.
-     */
     public void zoomIn() {
 
         candleWidth += 4f;
@@ -219,9 +196,6 @@ public class ForexChartView extends View {
         invalidate();
     }
 
-    /*
-     * Return to the latest price action.
-     */
     public void fitLatest() {
 
         scrollOffset = 0f;
@@ -267,9 +241,6 @@ public class ForexChartView extends View {
         }
     }
 
-    /*
-     * Background + grid.
-     */
     private void drawBackground(
             Canvas canvas
     ) {
@@ -293,9 +264,6 @@ public class ForexChartView extends View {
 
         paint.setColor(GRID);
 
-        /*
-         * Horizontal price grid.
-         */
         for (int i = 1; i < 6; i++) {
 
             float y =
@@ -313,9 +281,6 @@ public class ForexChartView extends View {
             );
         }
 
-        /*
-         * Vertical time grid.
-         */
         float chartWidth =
                 right - CHART_LEFT;
 
@@ -368,14 +333,6 @@ public class ForexChartView extends View {
             return;
         }
 
-        /*
-         * Find the high/low ONLY inside the
-         * candles currently visible.
-         *
-         * This is the important change that makes
-         * the price chart behave naturally when
-         * scrolling through history.
-         */
         double minPrice =
                 Double.MAX_VALUE;
 
@@ -422,10 +379,6 @@ public class ForexChartView extends View {
             return;
         }
 
-        /*
-         * Include trade levels when they are
-         * actually inside/near the current chart.
-         */
         double tradeMin =
                 validMinTradeLevel();
 
@@ -448,9 +401,6 @@ public class ForexChartView extends View {
                     );
         }
 
-        /*
-         * Dynamic breathing room around price.
-         */
         double rawRange =
                 maxPrice - minPrice;
 
@@ -476,9 +426,6 @@ public class ForexChartView extends View {
         float chartHeight =
                 chartBottom - chartTop;
 
-        /*
-         * Draw candles.
-         */
         for (
                 int i = startIndex;
                 i < endIndex;
@@ -550,9 +497,6 @@ public class ForexChartView extends View {
                             ? BULL
                             : BEAR;
 
-            /*
-             * Wick.
-             */
             paint.setColor(candleColor);
 
             paint.setStyle(
@@ -577,9 +521,6 @@ public class ForexChartView extends View {
                     paint
             );
 
-            /*
-             * Body.
-             */
             paint.setStyle(
                     Paint.Style.FILL
             );
@@ -596,10 +537,6 @@ public class ForexChartView extends View {
                             closeY
                     );
 
-            /*
-             * Make small candles visible without
-             * destroying the real OHLC relationship.
-             */
             float minimumBody =
                     Math.max(
                             2f,
@@ -646,10 +583,6 @@ public class ForexChartView extends View {
                     paint
             );
 
-            /*
-             * Give bearish/bullish bodies a clean
-             * border when zoomed in.
-             */
             if (candleWidth >= 12f) {
 
                 paint.setStyle(
@@ -669,9 +602,6 @@ public class ForexChartView extends View {
             }
         }
 
-        /*
-         * Current/latest price line.
-         */
         drawLatestPriceLine(
                 canvas,
                 endIndex - 1,
@@ -682,9 +612,6 @@ public class ForexChartView extends View {
                 chartHeight
         );
 
-        /*
-         * Entry / SL / TP.
-         */
         drawTradeLevels(
                 canvas,
                 minPrice,
@@ -694,18 +621,12 @@ public class ForexChartView extends View {
                 chartHeight
         );
 
-        /*
-         * Price axis.
-         */
         drawPriceScale(
                 canvas,
                 minPrice,
                 maxPrice
         );
 
-        /*
-         * Time axis.
-         */
         drawTimeScale(
                 canvas,
                 startIndex,
@@ -777,9 +698,6 @@ public class ForexChartView extends View {
                 Paint.Style.STROKE
         );
 
-        /*
-         * Dashed-style approximation.
-         */
         float x1 = CHART_LEFT;
         float x2 = getWidth() - CHART_RIGHT;
 
@@ -1086,9 +1004,7 @@ public class ForexChartView extends View {
         canvas.drawText(
                 buy ? "B" : "S",
                 x,
-                buy
-                        ? markerY + 5f
-                        : markerY + 5f,
+                markerY + 5f,
                 paint
         );
 
@@ -1126,9 +1042,6 @@ public class ForexChartView extends View {
                 Paint.Style.STROKE
         );
 
-        /*
-         * Horizontal crosshair.
-         */
         canvas.drawLine(
                 CHART_LEFT,
                 crosshairY,
@@ -1137,9 +1050,6 @@ public class ForexChartView extends View {
                 paint
         );
 
-        /*
-         * Vertical crosshair.
-         */
         canvas.drawLine(
                 crosshairX,
                 CHART_TOP,
@@ -1152,9 +1062,6 @@ public class ForexChartView extends View {
                 Paint.Style.FILL
         );
 
-        /*
-         * Price label.
-         */
         paint.setColor(
                 Color.rgb(25, 35, 48)
         );
@@ -1185,9 +1092,6 @@ public class ForexChartView extends View {
                 paint
         );
 
-        /*
-         * Candle/time label at bottom.
-         */
         int index =
                 getCandleIndexFromX(
                         crosshairX
@@ -1328,6 +1232,10 @@ public class ForexChartView extends View {
                         - CHART_TOP
                         - CHART_BOTTOM;
 
+        if (chartHeight <= 0) {
+            return Double.NaN;
+        }
+
         double normalized =
                 (
                         crosshairY
@@ -1361,15 +1269,6 @@ public class ForexChartView extends View {
         );
     }
 
-    /*
-     * The latest candles are on the right.
-     *
-     * scrollOffset = 0
-     *     -> newest view
-     *
-     * larger scrollOffset
-     *     -> older history
-     */
     private int calculateStartIndex() {
 
         int visible =
@@ -1536,9 +1435,6 @@ public class ForexChartView extends View {
                                     / (float) steps
                     );
 
-            /*
-             * Small tick on the price axis.
-             */
             paint.setColor(
                     Color.rgb(90, 100, 115)
             );
@@ -1870,9 +1766,6 @@ public class ForexChartView extends View {
                 : value;
     }
 
-    /*
-     * Pinch-to-zoom support.
-     */
     private class ScaleListener
             extends ScaleGestureDetector.SimpleOnScaleGestureListener {
 
@@ -1915,20 +1808,46 @@ public class ForexChartView extends View {
         }
     }
 
+    /*
+     * IMPORTANT:
+     *
+     * Prevent the parent ScrollView from stealing
+     * touch gestures while the user is interacting
+     * with the chart.
+     */
+    private void setParentScrollEnabled(
+            boolean enabled
+    ) {
+
+        ViewParent parent =
+                getParent();
+
+        while (parent != null) {
+
+            parent.requestDisallowInterceptTouchEvent(
+                    !enabled
+            );
+
+            parent =
+                    parent.getParent();
+        }
+    }
+
     @Override
     public boolean onTouchEvent(
             MotionEvent event
     ) {
 
-        /*
-         * Let the scale detector handle
-         * two-finger pinch zoom.
-         */
         scaleDetector.onTouchEvent(event);
 
         switch (event.getActionMasked()) {
 
             case MotionEvent.ACTION_DOWN:
+
+                /*
+                 * Lock the parent dashboard immediately.
+                 */
+                setParentScrollEnabled(false);
 
                 lastX =
                         event.getX();
@@ -1953,8 +1872,11 @@ public class ForexChartView extends View {
             case MotionEvent.ACTION_POINTER_DOWN:
 
                 /*
-                 * Two fingers = zoom.
+                 * Keep the dashboard locked during
+                 * two-finger pinch zoom.
                  */
+                setParentScrollEnabled(false);
+
                 showCrosshair = false;
 
                 invalidate();
@@ -1964,9 +1886,11 @@ public class ForexChartView extends View {
             case MotionEvent.ACTION_MOVE:
 
                 /*
-                 * While pinching, don't treat the
-                 * movement as chart scrolling.
+                 * Keep the parent from taking the
+                 * gesture while the chart is moving.
                  */
+                setParentScrollEnabled(false);
+
                 if (
                         event.getPointerCount()
                                 >= 2
@@ -1991,10 +1915,6 @@ public class ForexChartView extends View {
                         event.getY()
                                 - lastY;
 
-                /*
-                 * One finger horizontal drag:
-                 * move through historical candles.
-                 */
                 if (
                         Math.abs(dx)
                                 > Math.abs(dy)
@@ -2006,10 +1926,6 @@ public class ForexChartView extends View {
 
                     if (slot > 0) {
 
-                        /*
-                         * Drag left -> older candles.
-                         * Drag right -> newer candles.
-                         */
                         scrollOffset -=
                                 dx / slot;
 
@@ -2018,10 +1934,6 @@ public class ForexChartView extends View {
 
                 } else {
 
-                    /*
-                     * Vertical finger movement controls
-                     * the crosshair.
-                     */
                     crosshairY =
                             event.getY();
                 }
@@ -2044,43 +1956,63 @@ public class ForexChartView extends View {
             case MotionEvent.ACTION_POINTER_UP:
 
                 /*
-                 * Keep the remaining finger from
-                 * creating a large jump.
+                 * Still keep the parent locked because
+                 * another finger may remain on the chart.
                  */
+                setParentScrollEnabled(false);
+
                 int pointerIndex =
                         event.getActionIndex();
 
+                int remainingPointer = 0;
+
                 if (
-                        pointerIndex
+                        remainingPointer
                                 < event.getPointerCount()
                 ) {
 
-                    lastX =
-                            event.getX(
-                                    Math.min(
-                                            0,
-                                            event.getPointerCount() - 1
-                                    )
-                            );
+                    if (
+                            remainingPointer
+                                    != pointerIndex
+                    ) {
 
-                    lastY =
-                            event.getY(
-                                    Math.min(
-                                            0,
-                                            event.getPointerCount() - 1
-                                    )
-                            );
+                        lastX =
+                                event.getX(
+                                        remainingPointer
+                                );
+
+                        lastY =
+                                event.getY(
+                                        remainingPointer
+                                );
+                    }
                 }
 
                 return true;
 
             case MotionEvent.ACTION_UP:
 
+                moving = false;
+
+                /*
+                 * Release the dashboard only after
+                 * the chart interaction has finished.
+                 */
+                setParentScrollEnabled(true);
+
+                performClick();
+
+                return true;
+
             case MotionEvent.ACTION_CANCEL:
 
                 moving = false;
 
-                performClick();
+                /*
+                 * Always release the parent on cancel
+                 * so the dashboard cannot remain locked.
+                 */
+                setParentScrollEnabled(true);
 
                 return true;
         }
