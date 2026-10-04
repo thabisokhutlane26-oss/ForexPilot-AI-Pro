@@ -27,7 +27,6 @@ import java.util.TimeZone;
 
 public class MainActivity extends Activity {
 
-    // Advanced trading UI components
     private ForexChartView forexChartView;
     private RsiChartView rsiChartView;
     private ChartDrawingView chartDrawingView;
@@ -35,7 +34,6 @@ public class MainActivity extends Activity {
     private SignalBadgeView signalBadgeView;
     private MultiTimeframeView multiTimeframeView;
 
-    // Background alerts
     private BackgroundScanner backgroundScanner;
     private SignalAlertCoordinator signalAlertCoordinator;
     private SignalNotificationManager signalNotificationManager;
@@ -144,7 +142,6 @@ public class MainActivity extends Activity {
             new Runnable() {
                 @Override
                 public void run() {
-
                     updateTimeAndSessions();
 
                     clockHandler.postDelayed(
@@ -677,7 +674,7 @@ public class MainActivity extends Activity {
 
         chartCard.addView(
                 chartTitle,
-                params(48)
+                params(0)
         );
 
         forexChartView =
@@ -1097,12 +1094,14 @@ public class MainActivity extends Activity {
 
         if (connectionStatus != null) {
             connectionStatus.setText(
-                    "●  READY • "
+                    "●  LOADING HISTORICAL DATA • "
                             + selectedMarket
+                            + " • "
+                            + selectedTimeframe
             );
 
             connectionStatus.setTextColor(
-                    MUTED
+                    YELLOW
             );
         }
 
@@ -1126,6 +1125,8 @@ public class MainActivity extends Activity {
         if (multiTimeframeView != null) {
             multiTimeframeView.clearResults();
         }
+
+        requestChartCandles();
     }
 
     // =============================================================
@@ -1228,7 +1229,7 @@ public class MainActivity extends Activity {
             } else {
 
                 nextMarketText.setText(
-                        "MARKET CLOSED • NO NEW SIGNALS"
+                        "MARKET CLOSED • HISTORICAL DATA AVAILABLE"
                 );
 
                 nextMarketText.setTextColor(
@@ -1250,17 +1251,11 @@ public class MainActivity extends Activity {
             );
         }
 
-        if (!forexOpen) {
+        if (forexOpen
+                && !lastForexOpen
+                && signalRepository != null) {
 
-            if (lastForexOpen) {
-                showMarketClosedState();
-            }
-
-        } else if (!lastForexOpen) {
-
-            if (signalRepository != null) {
-                requestCurrentSignal();
-            }
+            requestCurrentSignal();
         }
 
         lastForexOpen =
@@ -1319,7 +1314,7 @@ public class MainActivity extends Activity {
         if (connectionStatus != null) {
 
             connectionStatus.setText(
-                    "●  MARKET CLOSED • SIGNALS LOCKED"
+                    "●  MARKET CLOSED • HISTORICAL DATA LOADED"
             );
 
             connectionStatus.setTextColor(
@@ -1327,34 +1322,9 @@ public class MainActivity extends Activity {
             );
         }
 
-        if (priceText != null) {
-            priceText.setText(
-                    "PRICE  --"
-            );
-        }
-
         if (trendText != null) {
             trendText.setText(
-                    "TREND\nMARKET CLOSED"
-            );
-        }
-
-        if (rsiText != null) {
-            rsiText.setText(
-                    "RSI\n--"
-            );
-        }
-
-        if (atrText != null) {
-            atrText.setText(
-                    "ATR\n--"
-            );
-        }
-
-        if (momentumText != null) {
-            momentumText.setText(
-                    "TIMEFRAME\n"
-                            + selectedTimeframe
+                    "TREND\nHISTORICAL"
             );
         }
 
@@ -1562,16 +1532,26 @@ public class MainActivity extends Activity {
                                 runOnUiThread(
                                         () -> {
 
+                                            if (signal == null) {
+                                                return;
+                                            }
+
                                             if (!isForexMarketOpen(
                                                     new Date()
                                             )) {
 
-                                                showMarketClosedState();
+                                                updatePrimaryDashboard(
+                                                        signal
+                                                );
 
-                                                return;
-                                            }
+                                                connectionStatus.setText(
+                                                        "●  HISTORICAL SIGNAL DATA • MARKET CLOSED"
+                                                );
 
-                                            if (signal == null) {
+                                                connectionStatus.setTextColor(
+                                                        MUTED
+                                                );
+
                                                 return;
                                             }
 
@@ -1597,15 +1577,6 @@ public class MainActivity extends Activity {
                                 runOnUiThread(
                                         () -> {
 
-                                            if (!isForexMarketOpen(
-                                                    new Date()
-                                            )) {
-
-                                                showMarketClosedState();
-
-                                                return;
-                                            }
-
                                             mtfScanning = false;
 
                                             connectionStatus.setText(
@@ -1625,28 +1596,15 @@ public class MainActivity extends Activity {
                                                     YELLOW
                                             );
 
-                                            clearTradeLevels();
+                                            if (message != null
+                                                    && !message.trim().isEmpty()) {
 
-                                            priceText.setText(
-                                                    "PRICE  --"
-                                            );
+                                                nextMarketText.setText(
+                                                        "DATA ERROR • "
+                                                                + message
+                                                );
 
-                                            trendText.setText(
-                                                    "TREND\nERROR"
-                                            );
-
-                                            rsiText.setText(
-                                                    "RSI\n--"
-                                            );
-
-                                            atrText.setText(
-                                                    "ATR\n--"
-                                            );
-
-                                            momentumText.setText(
-                                                    "TIMEFRAME\n"
-                                                            + selectedTimeframe
-                                            );
+                                            }
 
                                             mtfConfluenceText.setText(
                                                     "MTF CONFLUENCE • DATA ERROR"
@@ -1663,6 +1621,10 @@ public class MainActivity extends Activity {
                         }
                 );
 
+        // Always load historical chart candles.
+        requestChartCandles();
+
+        // Only start signal scanning when the market is open.
         if (isForexMarketOpen(
                 new Date()
         )) {
@@ -1676,67 +1638,437 @@ public class MainActivity extends Activity {
     }
 
     // =============================================================
+    // HISTORICAL CHART DATA
+    // =============================================================
+
+    private void requestChartCandles() {
+
+        if (marketDataProvider == null) {
+            return;
+        }
+
+        final String market =
+                selectedMarket;
+
+        final String timeframe =
+                selectedTimeframe;
+
+        if (connectionStatus != null) {
+
+            connectionStatus.setText(
+                    "●  LOADING CHART • "
+                            + market
+                            + " • "
+                            + timeframe
+            );
+
+            connectionStatus.setTextColor(
+                    YELLOW
+            );
+        }
+
+        marketDataProvider.requestCandles(
+                market,
+                timeframe,
+                new MarketDataManager.MarketDataCallback() {
+
+                    @Override
+                    public void onCandlesReceived(
+                            List<Candle> candles
+                    ) {
+
+                        runOnUiThread(
+                                () -> {
+
+                                    if (!market.equals(
+                                            selectedMarket
+                                    )) {
+                                        return;
+                                    }
+
+                                    if (!timeframe.equals(
+                                            selectedTimeframe
+                                    )) {
+                                        return;
+                                    }
+
+                                    if (candles == null
+                                            || candles.isEmpty()) {
+
+                                        connectionStatus.setText(
+                                                "●  CHART DATA EMPTY"
+                                        );
+
+                                        connectionStatus.setTextColor(
+                                                RED
+                                        );
+
+                                        return;
+                                    }
+
+                                    // This is the missing connection.
+                                    forexChartView.setCandles(
+                                            candles
+                                    );
+
+                                    updateIndicatorDashboard(
+                                            market,
+                                            candles
+                                    );
+
+                                    Candle latest =
+                                            candles.get(
+                                                    candles.size() - 1
+                                            );
+
+                                    if (latest != null) {
+
+                                        double close =
+                                                latest.getClose();
+
+                                        if (!Double.isNaN(close)
+                                                && !Double.isInfinite(close)) {
+
+                                            priceText.setText(
+                                                    "PRICE  "
+                                                            + formatPrice(
+                                                            market,
+                                                            close
+                                                    )
+                                            );
+                                        }
+                                    }
+
+                                    boolean open =
+                                            isForexMarketOpen(
+                                                    new Date()
+                                            );
+
+                                    if (open) {
+
+                                        connectionStatus.setText(
+                                                "●  LIVE CHART • "
+                                                        + market
+                                                        + " • "
+                                                        + timeframe
+                                                        + " • "
+                                                        + candles.size()
+                                                        + " CANDLES"
+                                        );
+
+                                        connectionStatus.setTextColor(
+                                                GREEN
+                                        );
+
+                                    } else {
+
+                                        connectionStatus.setText(
+                                                "●  HISTORICAL CHART • "
+                                                        + market
+                                                        + " • "
+                                                        + timeframe
+                                                        + " • "
+                                                        + candles.size()
+                                                        + " CANDLES"
+                                        );
+
+                                        connectionStatus.setTextColor(
+                                                MUTED
+                                        );
+                                    }
+                                }
+                        );
+                    }
+
+                    @Override
+                    public void onPriceReceived(
+                            double price
+                    ) {
+
+                        runOnUiThread(
+                                () -> {
+
+                                    if (!market.equals(
+                                            selectedMarket
+                                    )) {
+                                        return;
+                                    }
+
+                                    if (!Double.isNaN(price)
+                                            && !Double.isInfinite(price)) {
+
+                                        priceText.setText(
+                                                "PRICE  "
+                                                        + formatPrice(
+                                                        market,
+                                                        price
+                                                )
+                                        );
+                                    }
+                                }
+                        );
+                    }
+
+                    @Override
+                    public void onError(
+                            String message
+                    ) {
+
+                        runOnUiThread(
+                                () -> {
+
+                                    if (!market.equals(
+                                            selectedMarket
+                                    )) {
+                                        return;
+                                    }
+
+                                    connectionStatus.setText(
+                                            "●  CHART DATA ERROR"
+                                    );
+
+                                    connectionStatus.setTextColor(
+                                            RED
+                                    );
+
+                                    nextMarketText.setText(
+                                            "CHART ERROR • "
+                                                    + (message == null
+                                                    ? "UNKNOWN ERROR"
+                                                    : message)
+                                    );
+
+                                    nextMarketText.setTextColor(
+                                            RED
+                                    );
+                                }
+                        );
+                    }
+                }
+        );
+    }
+
+    // =============================================================
+    // INDICATOR DATA FROM REAL CANDLES
+    // =============================================================
+
+    private void updateIndicatorDashboard(
+            String market,
+            List<Candle> candles
+    ) {
+
+        if (candles == null
+                || candles.isEmpty()) {
+            return;
+        }
+
+        String trend =
+                IndicatorEngine.trend(
+                        candles,
+                        20,
+                        50
+                );
+
+        double rsi =
+                IndicatorEngine.rsi(
+                        candles,
+                        14
+                );
+
+        double atr =
+                IndicatorEngine.atr(
+                        candles,
+                        14
+                );
+
+        double momentum =
+                IndicatorEngine.momentum(
+                        candles,
+                        5
+                );
+
+        if (trendText != null) {
+
+            trendText.setText(
+                    "TREND\n"
+                            + (trend == null
+                            ? "--"
+                            : trend)
+            );
+
+            if ("BULLISH".equalsIgnoreCase(
+                    trend
+            )) {
+
+                trendText.setTextColor(
+                        GREEN
+                );
+
+            } else if ("BEARISH".equalsIgnoreCase(
+                    trend
+            )) {
+
+                trendText.setTextColor(
+                        RED
+                );
+
+            } else {
+
+                trendText.setTextColor(
+                        WHITE
+                );
+            }
+        }
+
+        if (rsiText != null) {
+
+            if (!Double.isNaN(rsi)
+                    && !Double.isInfinite(rsi)) {
+
+                rsiText.setText(
+                        "RSI\n"
+                                + String.format(
+                                Locale.US,
+                                "%.2f",
+                                rsi
+                        )
+                );
+
+                if (rsi >= 70.0) {
+
+                    rsiText.setTextColor(
+                            RED
+                    );
+
+                } else if (rsi <= 30.0) {
+
+                    rsiText.setTextColor(
+                            GREEN
+                    );
+
+                } else {
+
+                    rsiText.setTextColor(
+                            WHITE
+                    );
+                }
+
+            } else {
+
+                rsiText.setText(
+                        "RSI\n--"
+                );
+            }
+        }
+
+        if (atrText != null) {
+
+            if (!Double.isNaN(atr)
+                    && !Double.isInfinite(atr)) {
+
+                atrText.setText(
+                        "ATR\n"
+                                + formatPrice(
+                                market,
+                                atr
+                        )
+                );
+
+            } else {
+
+                atrText.setText(
+                        "ATR\n--"
+                );
+            }
+        }
+
+        if (momentumText != null) {
+
+            if (!Double.isNaN(momentum)
+                    && !Double.isInfinite(momentum)) {
+
+                momentumText.setText(
+                        "MOMENTUM\n"
+                                + formatPrice(
+                                market,
+                                momentum
+                        )
+                );
+
+            } else {
+
+                momentumText.setText(
+                        "TIMEFRAME\n"
+                                + selectedTimeframe
+                );
+            }
+        }
+    }
+
+    // =============================================================
     // PRIMARY SIGNAL
     // =============================================================
 
     private void requestCurrentSignal() {
 
-    if (signalRepository == null) {
-        return;
+        if (signalRepository == null) {
+            return;
+        }
+
+        if (mtfScanning) {
+            return;
+        }
+
+        if (!isForexMarketOpen(
+                new Date()
+        )) {
+
+            // Historical chart data is still allowed.
+            requestChartCandles();
+            return;
+        }
+
+        final String marketToScan =
+                selectedMarket;
+
+        final String timeframeToScan =
+                selectedTimeframe;
+
+        pendingPrimarySignal = null;
+        mtfResults.clear();
+
+        resetMtfDisplay();
+
+        connectionStatus.setText(
+                "●  SCANNING "
+                        + marketToScan
+                        + " • "
+                        + timeframeToScan
+        );
+
+        connectionStatus.setTextColor(
+                YELLOW
+        );
+
+        signalText.setText(
+                "WAIT"
+        );
+
+        signalText.setTextColor(
+                YELLOW
+        );
+
+        clearTradeLevels();
+
+        priceText.setText(
+                "PRICE  --"
+        );
+
+        signalRepository.requestSignal(
+                marketToScan,
+                timeframeToScan
+        );
     }
-
-    if (mtfScanning) {
-        return;
-    }
-
-    final String marketToScan =
-            selectedMarket;
-
-    final String timeframeToScan =
-            selectedTimeframe;
-
-    pendingPrimarySignal = null;
-    mtfResults.clear();
-
-    resetMtfDisplay();
-
-    connectionStatus.setText(
-            "●  LOADING "
-                    + marketToScan
-                    + " • "
-                    + timeframeToScan
-    );
-
-    connectionStatus.setTextColor(
-            YELLOW
-    );
-
-    signalText.setText(
-            "WAIT"
-    );
-
-    signalText.setTextColor(
-            YELLOW
-    );
-
-    clearTradeLevels();
-
-    priceText.setText(
-            "PRICE  --"
-    );
-
-    /*
-     * Always request the latest historical candles.
-     *
-     * This is intentionally NOT blocked when the forex market
-     * is closed. Twelve Data can still return the most recent
-     * completed candles, allowing the chart to remain visible.
-     */
-    signalRepository.requestSignal(
-            marketToScan,
-            timeframeToScan
-    );
-}
 
     // =============================================================
     // MULTI-TIMEFRAME ANALYSIS
@@ -1756,8 +2088,6 @@ public class MainActivity extends Activity {
         if (!isForexMarketOpen(
                 new Date()
         )) {
-
-            showMarketClosedState();
 
             return;
         }
@@ -1801,8 +2131,7 @@ public class MainActivity extends Activity {
                 new Date()
         )) {
 
-            showMarketClosedState();
-
+            mtfScanning = false;
             return;
         }
 
@@ -1840,15 +2169,6 @@ public class MainActivity extends Activity {
                                 () -> {
 
                                     if (!mtfScanning) {
-                                        return;
-                                    }
-
-                                    if (!isForexMarketOpen(
-                                            new Date()
-                                    )) {
-
-                                        showMarketClosedState();
-
                                         return;
                                     }
 
@@ -1965,8 +2285,6 @@ public class MainActivity extends Activity {
         if (!isForexMarketOpen(
                 new Date()
         )) {
-
-            showMarketClosedState();
 
             return;
         }
@@ -2338,7 +2656,9 @@ public class MainActivity extends Activity {
                 new Date()
         )) {
 
-            showMarketClosedState();
+            updatePrimaryDashboard(
+                    signal
+            );
 
             return;
         }
