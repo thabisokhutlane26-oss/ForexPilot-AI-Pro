@@ -655,49 +655,52 @@ public class MainActivity extends Activity {
                 params(14)
         );
 
-        // =============================================================
-// ADVANCED PRICE CHART
-// =============================================================
+        // =========================================================
+        // ADVANCED PRICE CHART
+        // =========================================================
 
-LinearLayout chartCard = createCard();
+        LinearLayout chartCard =
+                createCard();
 
-TextView chartTitle = createText(
-        "PRICE CHART",
-        16,
-        WHITE
-);
+        TextView chartTitle =
+                createText(
+                        "PRICE CHART",
+                        16,
+                        WHITE,
+                        true
+                );
 
-chartTitle.setTypeface(
-        Typeface.DEFAULT,
-        Typeface.BOLD
-);
+        chartTitle.setTypeface(
+                Typeface.DEFAULT,
+                Typeface.BOLD
+        );
 
-chartCard.addView(
-        chartTitle,
-        params(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                48
-        )
-);
+        chartCard.addView(
+                chartTitle,
+                params(48)
+        );
 
-forexChartView = new ForexChartView(this);
+        forexChartView =
+                new ForexChartView(this);
 
-chartCard.addView(
-        forexChartView,
-        new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                900
-        )
-);
+        chartCard.addView(
+                forexChartView,
+                new LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        900
+                )
+        );
 
-root.addView(
-        chartCard,
-        params(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-        )
-);
-      LinearLayout tradeCard =
+        root.addView(
+                chartCard,
+                params(14)
+        );
+
+        // =========================================================
+        // TRADE PLAN
+        // =========================================================
+
+        LinearLayout tradeCard =
                 createCard();
 
         tradeCard.addView(
@@ -1034,6 +1037,95 @@ root.addView(
         setContentView(
                 scrollView
         );
+    }
+
+    // =============================================================
+    // RESET AFTER MARKET/TIMEFRAME CHANGE
+    // =============================================================
+
+    private void resetForNewSelection() {
+
+        mtfScanning = false;
+        pendingPrimarySignal = null;
+
+        mtfResults.clear();
+        mtfRequestIndex = 0;
+
+        resetMtfDisplay();
+        clearTradeLevels();
+
+        if (signalText != null) {
+            signalText.setText(
+                    "WAIT"
+            );
+
+            signalText.setTextColor(
+                    YELLOW
+            );
+        }
+
+        if (priceText != null) {
+            priceText.setText(
+                    "PRICE  --"
+            );
+        }
+
+        if (trendText != null) {
+            trendText.setText(
+                    "TREND\n--"
+            );
+        }
+
+        if (rsiText != null) {
+            rsiText.setText(
+                    "RSI\n--"
+            );
+        }
+
+        if (atrText != null) {
+            atrText.setText(
+                    "ATR\n--"
+            );
+        }
+
+        if (momentumText != null) {
+            momentumText.setText(
+                    "TIMEFRAME\n"
+                            + selectedTimeframe
+            );
+        }
+
+        if (connectionStatus != null) {
+            connectionStatus.setText(
+                    "●  READY • "
+                            + selectedMarket
+            );
+
+            connectionStatus.setTextColor(
+                    MUTED
+            );
+        }
+
+        if (forexChartView != null) {
+            forexChartView.clearChart();
+            forexChartView.clearTradeLevels();
+        }
+
+        if (rsiChartView != null) {
+            rsiChartView.clearRsi();
+        }
+
+        if (tradeLevelView != null) {
+            tradeLevelView.clearSignal();
+        }
+
+        if (signalBadgeView != null) {
+            signalBadgeView.clearSignal();
+        }
+
+        if (multiTimeframeView != null) {
+            multiTimeframeView.clearResults();
+        }
     }
 
     // =============================================================
@@ -1895,7 +1987,7 @@ root.addView(
                         + confluence.getWaitCount()
                         + " • STRENGTH "
                         + confluence.getStrength()
-                );
+        );
 
         Signal.Direction mtfDirection =
                 confluence.getDirection();
