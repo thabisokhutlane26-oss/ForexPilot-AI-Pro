@@ -6,25 +6,44 @@ import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.RectF;
 import android.view.MotionEvent;
+import android.view.ScaleGestureDetector;
 import android.view.View;
 
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
 import java.util.Locale;
+import java.util.TimeZone;
 
 public class ForexChartView extends View {
 
-    private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private final List<Candle> candles = new ArrayList<>();
+    private final Paint paint =
+            new Paint(Paint.ANTI_ALIAS_FLAG);
+
+    private final List<Candle> candles =
+            new ArrayList<>();
+
+    private final ScaleGestureDetector scaleDetector;
 
     private float lastX;
     private float lastY;
 
     private boolean moving = false;
 
+    /*
+     * Candle zoom level.
+     * This is intentionally larger than the old
+     * renderer so individual candles are easier
+     * to analyze on a phone.
+     */
     private float candleWidth = 18f;
-    private float spacing = 5f;
+    private float spacing = 6f;
 
+    /*
+     * 0 = latest candles.
+     * Larger values = move backwards into history.
+     */
     private float scrollOffset = 0f;
 
     private float crosshairX = -1f;
@@ -41,28 +60,64 @@ public class ForexChartView extends View {
     private Signal.Direction signalDirection =
             Signal.Direction.WAIT;
 
-    private static final float MIN_CANDLE_WIDTH = 6f;
-    private static final float MAX_CANDLE_WIDTH = 45f;
+    private static final float MIN_CANDLE_WIDTH = 5f;
+    private static final float MAX_CANDLE_WIDTH = 55f;
 
-    private static final float CHART_LEFT = 16f;
-    private static final float CHART_RIGHT = 105f;
+    private static final float MIN_SPACING = 2f;
+    private static final float MAX_SPACING = 14f;
+
+    /*
+     * Chart layout.
+     *
+     * The right side is reserved for the price scale.
+     */
+    private static final float CHART_LEFT = 18f;
+    private static final float CHART_RIGHT = 96f;
     private static final float CHART_TOP = 28f;
-    private static final float CHART_BOTTOM = 30f;
+    private static final float CHART_BOTTOM = 48f;
+
+    private static final int BACKGROUND =
+            Color.rgb(10, 15, 25);
+
+    private static final int GRID =
+            Color.rgb(35, 45, 60);
+
+    private static final int BORDER =
+            Color.rgb(65, 75, 90);
+
+    private static final int TEXT =
+            Color.rgb(175, 185, 200);
+
+    private static final int BULL =
+            Color.rgb(0, 220, 130);
+
+    private static final int BEAR =
+            Color.rgb(255, 70, 90);
 
     public ForexChartView(Context context) {
+
         super(context);
 
         paint.setStrokeWidth(2f);
 
-        setBackgroundColor(
-                Color.rgb(10, 15, 25)
-        );
+        setBackgroundColor(BACKGROUND);
 
         setFocusable(true);
         setFocusableInTouchMode(true);
+
+        scaleDetector =
+                new ScaleGestureDetector(
+                        context,
+                        new ScaleListener()
+                );
     }
 
-    public void setCandles(List<Candle> newCandles) {
+    /*
+     * Receive real market candles.
+     */
+    public void setCandles(
+            List<Candle> newCandles
+    ) {
 
         candles.clear();
 
@@ -70,7 +125,14 @@ public class ForexChartView extends View {
             candles.addAll(newCandles);
         }
 
+        /*
+         * Always start at the newest candles.
+         */
         scrollOffset = 0f;
+
+        crosshairX = -1f;
+        crosshairY = -1f;
+        showCrosshair = false;
 
         invalidate();
     }
@@ -124,33 +186,59 @@ public class ForexChartView extends View {
         invalidate();
     }
 
+    /*
+     * Existing external zoom button support.
+     */
     public void zoomIn() {
 
-        candleWidth += 3f;
+        candleWidth += 4f;
 
         if (candleWidth > MAX_CANDLE_WIDTH) {
             candleWidth = MAX_CANDLE_WIDTH;
         }
+
+        updateSpacing();
+
+        clampScroll();
 
         invalidate();
     }
 
     public void zoomOut() {
 
-        candleWidth -= 3f;
+        candleWidth -= 4f;
 
         if (candleWidth < MIN_CANDLE_WIDTH) {
             candleWidth = MIN_CANDLE_WIDTH;
         }
 
+        updateSpacing();
+
+        clampScroll();
+
         invalidate();
     }
 
+    /*
+     * Return to the latest price action.
+     */
     public void fitLatest() {
 
         scrollOffset = 0f;
 
         invalidate();
+    }
+
+    private void updateSpacing() {
+
+        spacing =
+                Math.max(
+                        MIN_SPACING,
+                        Math.min(
+                                MAX_SPACING,
+                                candleWidth * 0.30f
+                        )
+                );
     }
 
     @Override
@@ -179,13 +267,23 @@ public class ForexChartView extends View {
         }
     }
 
+    /*
+     * Background + grid.
+     */
     private void drawBackground(
             Canvas canvas
     ) {
 
-        canvas.drawColor(
-                Color.rgb(10, 15, 25)
-        );
+        canvas.drawColor(BACKGROUND);
+
+        float right =
+                getWidth() - CHART_RIGHT;
+
+        float bottom =
+                getHeight() - CHART_BOTTOM;
+
+        float chartHeight =
+                bottom - CHART_TOP;
 
         paint.setStyle(
                 Paint.Style.STROKE
@@ -193,51 +291,47 @@ public class ForexChartView extends View {
 
         paint.setStrokeWidth(1f);
 
-        paint.setColor(
-                Color.rgb(35, 45, 60)
-        );
+        paint.setColor(GRID);
 
-        float chartWidth =
-                getWidth() - CHART_RIGHT;
-
-        float chartHeight =
-                getHeight()
-                        - CHART_TOP
-                        - CHART_BOTTOM;
-
-        float horizontalStep =
-                chartHeight / 5f;
-
-        for (int i = 1; i < 5; i++) {
+        /*
+         * Horizontal price grid.
+         */
+        for (int i = 1; i < 6; i++) {
 
             float y =
                     CHART_TOP
-                            + horizontalStep * i;
+                            + chartHeight
+                            * i
+                            / 6f;
 
             canvas.drawLine(
                     CHART_LEFT,
                     y,
-                    chartWidth,
+                    right,
                     y,
                     paint
             );
         }
 
-        float verticalStep =
-                chartWidth / 6f;
+        /*
+         * Vertical time grid.
+         */
+        float chartWidth =
+                right - CHART_LEFT;
 
-        for (int i = 1; i < 6; i++) {
+        for (int i = 1; i < 8; i++) {
 
             float x =
                     CHART_LEFT
-                            + verticalStep * i;
+                            + chartWidth
+                            * i
+                            / 8f;
 
             canvas.drawLine(
                     x,
                     CHART_TOP,
                     x,
-                    getHeight()
-                            - CHART_BOTTOM,
+                    bottom,
                     paint
             );
         }
@@ -261,13 +355,27 @@ public class ForexChartView extends View {
         int startIndex =
                 calculateStartIndex();
 
+        int visibleCount =
+                calculateVisibleCount();
+
         int endIndex =
-                candles.size();
+                Math.min(
+                        candles.size(),
+                        startIndex + visibleCount
+                );
 
         if (startIndex >= endIndex) {
             return;
         }
 
+        /*
+         * Find the high/low ONLY inside the
+         * candles currently visible.
+         *
+         * This is the important change that makes
+         * the price chart behave naturally when
+         * scrolling through history.
+         */
         double minPrice =
                 Double.MAX_VALUE;
 
@@ -308,30 +416,46 @@ public class ForexChartView extends View {
 
             drawMessage(
                     canvas,
-                    "INVALID LIVE CANDLE DATA"
+                    "INVALID CANDLE DATA"
             );
 
             return;
         }
 
         /*
-         * Include trade levels in the visible
-         * price range when they are valid.
+         * Include trade levels when they are
+         * actually inside/near the current chart.
          */
-        minPrice =
-                Math.min(
-                        minPrice,
-                        validMinTradeLevel()
-                );
+        double tradeMin =
+                validMinTradeLevel();
 
-        maxPrice =
-                Math.max(
-                        maxPrice,
-                        validMaxTradeLevel()
-                );
+        double tradeMax =
+                validMaxTradeLevel();
+
+        if (Double.isFinite(tradeMin)) {
+            minPrice =
+                    Math.min(
+                            minPrice,
+                            tradeMin
+                    );
+        }
+
+        if (Double.isFinite(tradeMax)) {
+            maxPrice =
+                    Math.max(
+                            maxPrice,
+                            tradeMax
+                    );
+        }
+
+        /*
+         * Dynamic breathing room around price.
+         */
+        double rawRange =
+                maxPrice - minPrice;
 
         double padding =
-                (maxPrice - minPrice) * 0.08;
+                rawRange * 0.08;
 
         if (padding <= 0) {
             padding = 0.0001;
@@ -352,6 +476,9 @@ public class ForexChartView extends View {
         float chartHeight =
                 chartBottom - chartTop;
 
+        /*
+         * Draw candles.
+         */
         for (
                 int i = startIndex;
                 i < endIndex;
@@ -372,9 +499,9 @@ public class ForexChartView extends View {
                     );
 
             if (
-                    x < -candleWidth
-                            || x > width + candleWidth
-            ) {
+                    x < CHART_LEFT - candleWidth
+                            || x > width - CHART_RIGHT
+                    ) {
                 continue;
             }
 
@@ -418,24 +545,29 @@ public class ForexChartView extends View {
                     candle.getClose()
                             >= candle.getOpen();
 
-            if (bullish) {
+            int candleColor =
+                    bullish
+                            ? BULL
+                            : BEAR;
 
-                paint.setColor(
-                        Color.rgb(0, 220, 130)
-                );
-
-            } else {
-
-                paint.setColor(
-                        Color.rgb(255, 70, 90)
-                );
-            }
+            /*
+             * Wick.
+             */
+            paint.setColor(candleColor);
 
             paint.setStyle(
                     Paint.Style.STROKE
             );
 
-            paint.setStrokeWidth(2f);
+            paint.setStrokeWidth(
+                    Math.max(
+                            1f,
+                            Math.min(
+                                    2.5f,
+                                    candleWidth * 0.10f
+                            )
+                    )
+            );
 
             canvas.drawLine(
                     x,
@@ -445,6 +577,9 @@ public class ForexChartView extends View {
                     paint
             );
 
+            /*
+             * Body.
+             */
             paint.setStyle(
                     Paint.Style.FILL
             );
@@ -461,19 +596,48 @@ public class ForexChartView extends View {
                             closeY
                     );
 
+            /*
+             * Make small candles visible without
+             * destroying the real OHLC relationship.
+             */
+            float minimumBody =
+                    Math.max(
+                            2f,
+                            Math.min(
+                                    5f,
+                                    candleWidth * 0.25f
+                            )
+                    );
+
             if (
                     bodyBottom - bodyTop
-                            < 2f
+                            < minimumBody
             ) {
+
+                float center =
+                        (bodyTop + bodyBottom)
+                                / 2f;
+
+                bodyTop =
+                        center
+                                - minimumBody / 2f;
+
                 bodyBottom =
-                        bodyTop + 2f;
+                        center
+                                + minimumBody / 2f;
             }
+
+            float bodyWidth =
+                    Math.max(
+                            2f,
+                            candleWidth * 0.72f
+                    );
 
             RectF body =
                     new RectF(
-                            x - candleWidth / 2f,
+                            x - bodyWidth / 2f,
                             bodyTop,
-                            x + candleWidth / 2f,
+                            x + bodyWidth / 2f,
                             bodyBottom
                     );
 
@@ -481,8 +645,46 @@ public class ForexChartView extends View {
                     body,
                     paint
             );
+
+            /*
+             * Give bearish/bullish bodies a clean
+             * border when zoomed in.
+             */
+            if (candleWidth >= 12f) {
+
+                paint.setStyle(
+                        Paint.Style.STROKE
+                );
+
+                paint.setStrokeWidth(1f);
+
+                canvas.drawRect(
+                        body,
+                        paint
+                );
+
+                paint.setStyle(
+                        Paint.Style.FILL
+                );
+            }
         }
 
+        /*
+         * Current/latest price line.
+         */
+        drawLatestPriceLine(
+                canvas,
+                endIndex - 1,
+                startIndex,
+                minPrice,
+                priceRange,
+                chartTop,
+                chartHeight
+        );
+
+        /*
+         * Entry / SL / TP.
+         */
         drawTradeLevels(
                 canvas,
                 minPrice,
@@ -492,10 +694,22 @@ public class ForexChartView extends View {
                 chartHeight
         );
 
+        /*
+         * Price axis.
+         */
         drawPriceScale(
                 canvas,
                 minPrice,
                 maxPrice
+        );
+
+        /*
+         * Time axis.
+         */
+        drawTimeScale(
+                canvas,
+                startIndex,
+                endIndex
         );
 
         drawChartBorder(canvas);
@@ -510,6 +724,113 @@ public class ForexChartView extends View {
         );
     }
 
+    private void drawLatestPriceLine(
+            Canvas canvas,
+            int latestIndex,
+            int startIndex,
+            double minPrice,
+            double priceRange,
+            float chartTop,
+            float chartHeight
+    ) {
+
+        if (
+                latestIndex < startIndex
+                        || latestIndex >= candles.size()
+        ) {
+            return;
+        }
+
+        Candle latest =
+                candles.get(latestIndex);
+
+        if (!isValidCandle(latest)) {
+            return;
+        }
+
+        double latestPrice =
+                latest.getClose();
+
+        float y =
+                priceToY(
+                        latestPrice,
+                        minPrice,
+                        priceRange,
+                        chartTop,
+                        chartHeight
+                );
+
+        if (
+                y < CHART_TOP
+                        || y > getHeight() - CHART_BOTTOM
+        ) {
+            return;
+        }
+
+        paint.setColor(
+                Color.rgb(100, 160, 220)
+        );
+
+        paint.setStrokeWidth(1f);
+
+        paint.setStyle(
+                Paint.Style.STROKE
+        );
+
+        /*
+         * Dashed-style approximation.
+         */
+        float x1 = CHART_LEFT;
+        float x2 = getWidth() - CHART_RIGHT;
+
+        for (
+                float x = x1;
+                x < x2;
+                x += 12f
+        ) {
+
+            canvas.drawLine(
+                    x,
+                    y,
+                    Math.min(x + 6f, x2),
+                    y,
+                    paint
+            );
+        }
+
+        paint.setStyle(
+                Paint.Style.FILL
+        );
+
+        paint.setColor(
+                Color.rgb(30, 50, 70)
+        );
+
+        RectF box =
+                new RectF(
+                        getWidth() - CHART_RIGHT + 2f,
+                        y - 13f,
+                        getWidth() - 2f,
+                        y + 13f
+                );
+
+        canvas.drawRect(
+                box,
+                paint
+        );
+
+        paint.setColor(Color.WHITE);
+
+        paint.setTextSize(15f);
+
+        canvas.drawText(
+                formatPrice(latestPrice),
+                getWidth() - CHART_RIGHT + 7f,
+                y + 5f,
+                paint
+        );
+    }
+
     private void drawChartBorder(
             Canvas canvas
     ) {
@@ -520,9 +841,7 @@ public class ForexChartView extends View {
 
         paint.setStrokeWidth(1f);
 
-        paint.setColor(
-                Color.rgb(55, 65, 80)
-        );
+        paint.setColor(BORDER);
 
         canvas.drawRect(
                 CHART_LEFT,
@@ -562,7 +881,7 @@ public class ForexChartView extends View {
                 canvas,
                 stopLoss,
                 "SL",
-                Color.rgb(255, 70, 90),
+                BEAR,
                 minPrice,
                 maxPrice,
                 priceRange,
@@ -574,7 +893,7 @@ public class ForexChartView extends View {
                 canvas,
                 tp1,
                 "TP1",
-                Color.rgb(0, 220, 130),
+                BULL,
                 minPrice,
                 maxPrice,
                 priceRange,
@@ -586,7 +905,7 @@ public class ForexChartView extends View {
                 canvas,
                 tp2,
                 "TP2",
-                Color.rgb(0, 220, 130),
+                BULL,
                 minPrice,
                 maxPrice,
                 priceRange,
@@ -598,7 +917,7 @@ public class ForexChartView extends View {
                 canvas,
                 tp3,
                 "TP3",
-                Color.rgb(0, 220, 130),
+                BULL,
                 minPrice,
                 maxPrice,
                 priceRange,
@@ -659,11 +978,11 @@ public class ForexChartView extends View {
                 Paint.Style.FILL
         );
 
-        paint.setTextSize(20f);
+        paint.setTextSize(17f);
 
         canvas.drawText(
                 label,
-                getWidth() - CHART_RIGHT + 8f,
+                getWidth() - CHART_RIGHT + 7f,
                 y - 4f,
                 paint
         );
@@ -720,15 +1039,10 @@ public class ForexChartView extends View {
                 signalDirection
                         == Signal.Direction.BUY;
 
-        double markerPrice;
-
-        if (buy) {
-            markerPrice =
-                    lastCandle.getLow();
-        } else {
-            markerPrice =
-                    lastCandle.getHigh();
-        }
+        double markerPrice =
+                buy
+                        ? lastCandle.getLow()
+                        : lastCandle.getHigh();
 
         float y =
                 priceToY(
@@ -744,23 +1058,26 @@ public class ForexChartView extends View {
         );
 
         paint.setColor(
-                buy
-                        ? Color.rgb(0, 220, 130)
-                        : Color.rgb(255, 70, 90)
+                buy ? BULL : BEAR
         );
 
         float radius = 10f;
 
+        float markerY =
+                buy
+                        ? y + 20f
+                        : y - 20f;
+
         canvas.drawCircle(
                 x,
-                buy ? y + 18f : y - 18f,
+                markerY,
                 radius,
                 paint
         );
 
         paint.setColor(Color.WHITE);
 
-        paint.setTextSize(16f);
+        paint.setTextSize(14f);
 
         paint.setTextAlign(
                 Paint.Align.CENTER
@@ -769,7 +1086,9 @@ public class ForexChartView extends View {
         canvas.drawText(
                 buy ? "B" : "S",
                 x,
-                buy ? y + 23f : y - 13f,
+                buy
+                        ? markerY + 5f
+                        : markerY + 5f,
                 paint
         );
 
@@ -782,13 +1101,17 @@ public class ForexChartView extends View {
             Canvas canvas
     ) {
 
+        float right =
+                getWidth() - CHART_RIGHT;
+
+        float bottom =
+                getHeight() - CHART_BOTTOM;
+
         if (
                 crosshairX < CHART_LEFT
-                        || crosshairX
-                        > getWidth() - CHART_RIGHT
+                        || crosshairX > right
                         || crosshairY < CHART_TOP
-                        || crosshairY
-                        > getHeight() - CHART_BOTTOM
+                        || crosshairY > bottom
         ) {
             return;
         }
@@ -803,19 +1126,25 @@ public class ForexChartView extends View {
                 Paint.Style.STROKE
         );
 
+        /*
+         * Horizontal crosshair.
+         */
         canvas.drawLine(
                 CHART_LEFT,
                 crosshairY,
-                getWidth() - CHART_RIGHT,
+                right,
                 crosshairY,
                 paint
         );
 
+        /*
+         * Vertical crosshair.
+         */
         canvas.drawLine(
                 crosshairX,
                 CHART_TOP,
                 crosshairX,
-                getHeight() - CHART_BOTTOM,
+                bottom,
                 paint
         );
 
@@ -823,15 +1152,18 @@ public class ForexChartView extends View {
                 Paint.Style.FILL
         );
 
+        /*
+         * Price label.
+         */
         paint.setColor(
                 Color.rgb(25, 35, 48)
         );
 
         RectF priceBox =
                 new RectF(
-                        getWidth() - CHART_RIGHT + 3f,
+                        right + 2f,
                         crosshairY - 16f,
-                        getWidth() - 3f,
+                        getWidth() - 2f,
                         crosshairY + 16f
                 );
 
@@ -842,19 +1174,89 @@ public class ForexChartView extends View {
 
         paint.setColor(Color.WHITE);
 
-        paint.setTextSize(17f);
-
-        String text =
-                formatPrice(
-                        getPriceFromCrosshair()
-                );
+        paint.setTextSize(15f);
 
         canvas.drawText(
-                text,
-                getWidth() - CHART_RIGHT + 9f,
-                crosshairY + 6f,
+                formatPrice(
+                        getPriceFromCrosshair()
+                ),
+                right + 7f,
+                crosshairY + 5f,
                 paint
         );
+
+        /*
+         * Candle/time label at bottom.
+         */
+        int index =
+                getCandleIndexFromX(
+                        crosshairX
+                );
+
+        if (
+                index >= 0
+                        && index < candles.size()
+        ) {
+
+            Candle candle =
+                    candles.get(index);
+
+            if (candle != null) {
+
+                paint.setColor(
+                        Color.rgb(25, 35, 48)
+                );
+
+                String time =
+                        formatCandleTime(
+                                candle.getTimestamp()
+                        );
+
+                float boxWidth =
+                        110f;
+
+                float left =
+                        Math.max(
+                                CHART_LEFT,
+                                Math.min(
+                                        crosshairX - boxWidth / 2f,
+                                        right - boxWidth
+                                )
+                        );
+
+                RectF timeBox =
+                        new RectF(
+                                left,
+                                bottom + 3f,
+                                left + boxWidth,
+                                bottom + 29f
+                        );
+
+                canvas.drawRect(
+                        timeBox,
+                        paint
+                );
+
+                paint.setColor(Color.WHITE);
+
+                paint.setTextSize(13f);
+
+                paint.setTextAlign(
+                        Paint.Align.CENTER
+                );
+
+                canvas.drawText(
+                        time,
+                        left + boxWidth / 2f,
+                        bottom + 21f,
+                        paint
+                );
+
+                paint.setTextAlign(
+                        Paint.Align.LEFT
+                );
+            }
+        }
     }
 
     private double getPriceFromCrosshair() {
@@ -863,12 +1265,17 @@ public class ForexChartView extends View {
             return Double.NaN;
         }
 
-        /*
-         * Crosshair price is estimated from
-         * the currently visible candles.
-         */
         int startIndex =
                 calculateStartIndex();
+
+        int visibleCount =
+                calculateVisibleCount();
+
+        int endIndex =
+                Math.min(
+                        candles.size(),
+                        startIndex + visibleCount
+                );
 
         double min =
                 Double.MAX_VALUE;
@@ -878,7 +1285,7 @@ public class ForexChartView extends View {
 
         for (
                 int i = startIndex;
-                i < candles.size();
+                i < endIndex;
                 i++
         ) {
 
@@ -922,56 +1329,93 @@ public class ForexChartView extends View {
                         - CHART_BOTTOM;
 
         double normalized =
-                (crosshairY - CHART_TOP)
+                (
+                        crosshairY
+                                - CHART_TOP
+                )
                         / chartHeight;
 
         return max
                 - normalized * (max - min);
     }
 
-    private int calculateStartIndex() {
+    private int calculateVisibleCount() {
 
-        float candleSlot =
+        float slot =
                 candleWidth + spacing;
 
-        if (candleSlot <= 0) {
-            return 0;
+        if (slot <= 0) {
+            return 1;
         }
 
-        int chartWidth =
-                (int) (
-                        getWidth()
-                                - CHART_LEFT
-                                - CHART_RIGHT
-                );
+        float chartWidth =
+                getWidth()
+                        - CHART_LEFT
+                        - CHART_RIGHT;
+
+        return Math.max(
+                1,
+                (int) Math.floor(
+                        chartWidth / slot
+                )
+        );
+    }
+
+    /*
+     * The latest candles are on the right.
+     *
+     * scrollOffset = 0
+     *     -> newest view
+     *
+     * larger scrollOffset
+     *     -> older history
+     */
+    private int calculateStartIndex() {
 
         int visible =
-                (int)
-                        (chartWidth / candleSlot)
-                                + 3;
+                calculateVisibleCount();
+
+        int maxStart =
+                Math.max(
+                        0,
+                        candles.size() - visible
+                );
 
         int start =
-                candles.size()
-                        - visible;
-
-        start +=
-                (int) scrollOffset;
+                maxStart
+                        - Math.round(
+                        scrollOffset
+                );
 
         if (start < 0) {
             start = 0;
         }
 
-        if (
-                start >= candles.size()
-        ) {
-            start =
-                    Math.max(
-                            0,
-                            candles.size() - 1
-                    );
+        if (start > maxStart) {
+            start = maxStart;
         }
 
         return start;
+    }
+
+    private void clampScroll() {
+
+        int visible =
+                calculateVisibleCount();
+
+        float maxScroll =
+                Math.max(
+                        0,
+                        candles.size() - visible
+                );
+
+        if (scrollOffset < 0) {
+            scrollOffset = 0;
+        }
+
+        if (scrollOffset > maxScroll) {
+            scrollOffset = maxScroll;
+        }
     }
 
     private float getCandleX(
@@ -983,8 +1427,44 @@ public class ForexChartView extends View {
                 candleWidth + spacing;
 
         return CHART_LEFT
-                + (index - startIndex)
-                * slot;
+                + (
+                index - startIndex
+        )
+                * slot
+                + slot / 2f;
+    }
+
+    private int getCandleIndexFromX(
+            float x
+    ) {
+
+        int start =
+                calculateStartIndex();
+
+        float slot =
+                candleWidth + spacing;
+
+        if (slot <= 0) {
+            return start;
+        }
+
+        int index =
+                start
+                        + (int)
+                        Math.floor(
+                                (
+                                        x - CHART_LEFT
+                                ) / slot
+                        );
+
+        if (
+                index < 0
+                        || index >= candles.size()
+        ) {
+            return -1;
+        }
+
+        return index;
     }
 
     private float priceToY(
@@ -996,14 +1476,18 @@ public class ForexChartView extends View {
     ) {
 
         double normalized =
-                (price - minPrice)
-                        / range;
+                (
+                        price - minPrice
+                ) / range;
 
         return (float)
                 (
                         top
                                 + chartHeight
-                                * (1.0 - normalized)
+                                * (
+                                1.0
+                                        - normalized
+                        )
                 );
     }
 
@@ -1013,17 +1497,20 @@ public class ForexChartView extends View {
             double maxPrice
     ) {
 
-        paint.setColor(
-                Color.rgb(170, 180, 195)
-        );
+        paint.setColor(TEXT);
 
-        paint.setTextSize(20f);
+        paint.setTextSize(17f);
 
         paint.setStyle(
                 Paint.Style.FILL
         );
 
-        int steps = 5;
+        int steps = 6;
+
+        float chartHeight =
+                getHeight()
+                        - CHART_TOP
+                        - CHART_BOTTOM;
 
         for (
                 int i = 0;
@@ -1033,35 +1520,157 @@ public class ForexChartView extends View {
 
             double price =
                     minPrice
-                            + (maxPrice - minPrice)
+                            + (
+                            maxPrice
+                                    - minPrice
+                    )
                             * i
                             / steps;
 
             float y =
                     CHART_TOP
-                            + (
-                            getHeight()
-                                    - CHART_TOP
-                                    - CHART_BOTTOM
-                    )
+                            + chartHeight
                             * (
                             1f
                                     - i
                                     / (float) steps
                     );
 
+            /*
+             * Small tick on the price axis.
+             */
+            paint.setColor(
+                    Color.rgb(90, 100, 115)
+            );
+
+            canvas.drawRect(
+                    getWidth() - CHART_RIGHT,
+                    y - 1f,
+                    getWidth() - CHART_RIGHT + 5f,
+                    y + 1f,
+                    paint
+            );
+
+            paint.setColor(TEXT);
+
             String text =
                     formatPrice(price);
 
             canvas.drawText(
                     text,
-                    getWidth()
-                            - CHART_RIGHT
-                            + 8f,
-                    y + 6f,
+                    getWidth() - CHART_RIGHT + 8f,
+                    y + 5f,
                     paint
             );
         }
+    }
+
+    private void drawTimeScale(
+            Canvas canvas,
+            int startIndex,
+            int endIndex
+    ) {
+
+        if (endIndex <= startIndex) {
+            return;
+        }
+
+        float bottom =
+                getHeight() - CHART_BOTTOM;
+
+        int count =
+                endIndex - startIndex;
+
+        int labels =
+                Math.min(
+                        6,
+                        Math.max(
+                                2,
+                                count / 12
+                        )
+                );
+
+        int step =
+                Math.max(
+                        1,
+                        count / labels
+                );
+
+        paint.setTextSize(12f);
+
+        paint.setColor(TEXT);
+
+        for (
+                int i = startIndex;
+                i < endIndex;
+                i += step
+        ) {
+
+            Candle candle =
+                    candles.get(i);
+
+            if (candle == null) {
+                continue;
+            }
+
+            float x =
+                    getCandleX(
+                            i,
+                            startIndex
+                    );
+
+            if (
+                    x < CHART_LEFT
+                            || x > getWidth() - CHART_RIGHT
+            ) {
+                continue;
+            }
+
+            String text =
+                    formatCandleTime(
+                            candle.getTimestamp()
+                    );
+
+            paint.setTextAlign(
+                    Paint.Align.CENTER
+            );
+
+            canvas.drawText(
+                    text,
+                    x,
+                    bottom + 22f,
+                    paint
+            );
+        }
+
+        paint.setTextAlign(
+                Paint.Align.LEFT
+        );
+    }
+
+    private String formatCandleTime(
+            long timestamp
+    ) {
+
+        if (timestamp <= 0) {
+            return "--";
+        }
+
+        SimpleDateFormat format =
+                new SimpleDateFormat(
+                        "dd MMM HH:mm",
+                        Locale.US
+                );
+
+        format.setTimeZone(
+                TimeZone.getTimeZone(
+                        "Africa/Johannesburg"
+                )
+        );
+
+        return format.format(
+                new Date(timestamp)
+        );
     }
 
     private String formatPrice(
@@ -1115,7 +1724,7 @@ public class ForexChartView extends View {
                 Color.rgb(150, 165, 185)
         );
 
-        paint.setTextSize(25f);
+        paint.setTextSize(23f);
 
         paint.setStyle(
                 Paint.Style.FILL
@@ -1156,7 +1765,9 @@ public class ForexChartView extends View {
         )
                 && Double.isFinite(
                 candle.getClose()
-        );
+        )
+                && candle.getHigh()
+                >= candle.getLow();
     }
 
     private double validMinTradeLevel() {
@@ -1165,30 +1776,48 @@ public class ForexChartView extends View {
                 Double.MAX_VALUE;
 
         if (Double.isFinite(entry)) {
-            value = Math.min(value, entry);
+            value =
+                    Math.min(
+                            value,
+                            entry
+                    );
         }
 
         if (Double.isFinite(stopLoss)) {
-            value = Math.min(value, stopLoss);
+            value =
+                    Math.min(
+                            value,
+                            stopLoss
+                    );
         }
 
         if (Double.isFinite(tp1)) {
-            value = Math.min(value, tp1);
+            value =
+                    Math.min(
+                            value,
+                            tp1
+                    );
         }
 
         if (Double.isFinite(tp2)) {
-            value = Math.min(value, tp2);
+            value =
+                    Math.min(
+                            value,
+                            tp2
+                    );
         }
 
         if (Double.isFinite(tp3)) {
-            value = Math.min(value, tp3);
+            value =
+                    Math.min(
+                            value,
+                            tp3
+                    );
         }
 
-        if (value == Double.MAX_VALUE) {
-            return Double.MAX_VALUE;
-        }
-
-        return value;
+        return value == Double.MAX_VALUE
+                ? Double.NaN
+                : value;
     }
 
     private double validMaxTradeLevel() {
@@ -1197,36 +1826,105 @@ public class ForexChartView extends View {
                 -Double.MAX_VALUE;
 
         if (Double.isFinite(entry)) {
-            value = Math.max(value, entry);
+            value =
+                    Math.max(
+                            value,
+                            entry
+                    );
         }
 
         if (Double.isFinite(stopLoss)) {
-            value = Math.max(value, stopLoss);
+            value =
+                    Math.max(
+                            value,
+                            stopLoss
+                    );
         }
 
         if (Double.isFinite(tp1)) {
-            value = Math.max(value, tp1);
+            value =
+                    Math.max(
+                            value,
+                            tp1
+                    );
         }
 
         if (Double.isFinite(tp2)) {
-            value = Math.max(value, tp2);
+            value =
+                    Math.max(
+                            value,
+                            tp2
+                    );
         }
 
         if (Double.isFinite(tp3)) {
-            value = Math.max(value, tp3);
+            value =
+                    Math.max(
+                            value,
+                            tp3
+                    );
         }
 
-        if (value == -Double.MAX_VALUE) {
-            return -Double.MAX_VALUE;
-        }
+        return value == -Double.MAX_VALUE
+                ? Double.NaN
+                : value;
+    }
 
-        return value;
+    /*
+     * Pinch-to-zoom support.
+     */
+    private class ScaleListener
+            extends ScaleGestureDetector.SimpleOnScaleGestureListener {
+
+        @Override
+        public boolean onScale(
+                ScaleGestureDetector detector
+        ) {
+
+            float factor =
+                    detector.getScaleFactor();
+
+            if (!Float.isFinite(factor)
+                    || factor <= 0) {
+                return true;
+            }
+
+            candleWidth *= factor;
+
+            if (candleWidth
+                    < MIN_CANDLE_WIDTH) {
+
+                candleWidth =
+                        MIN_CANDLE_WIDTH;
+            }
+
+            if (candleWidth
+                    > MAX_CANDLE_WIDTH) {
+
+                candleWidth =
+                        MAX_CANDLE_WIDTH;
+            }
+
+            updateSpacing();
+
+            clampScroll();
+
+            invalidate();
+
+            return true;
+        }
     }
 
     @Override
     public boolean onTouchEvent(
             MotionEvent event
     ) {
+
+        /*
+         * Let the scale detector handle
+         * two-finger pinch zoom.
+         */
+        scaleDetector.onTouchEvent(event);
 
         switch (event.getActionMasked()) {
 
@@ -1252,7 +1950,34 @@ public class ForexChartView extends View {
 
                 return true;
 
+            case MotionEvent.ACTION_POINTER_DOWN:
+
+                /*
+                 * Two fingers = zoom.
+                 */
+                showCrosshair = false;
+
+                invalidate();
+
+                return true;
+
             case MotionEvent.ACTION_MOVE:
+
+                /*
+                 * While pinching, don't treat the
+                 * movement as chart scrolling.
+                 */
+                if (
+                        event.getPointerCount()
+                                >= 2
+                ) {
+
+                    showCrosshair = false;
+
+                    invalidate();
+
+                    return true;
+                }
 
                 if (!moving) {
                     return true;
@@ -1267,8 +1992,8 @@ public class ForexChartView extends View {
                                 - lastY;
 
                 /*
-                 * Horizontal movement scrolls
-                 * through historical candles.
+                 * One finger horizontal drag:
+                 * move through historical candles.
                  */
                 if (
                         Math.abs(dx)
@@ -1281,32 +2006,20 @@ public class ForexChartView extends View {
 
                     if (slot > 0) {
 
+                        /*
+                         * Drag left -> older candles.
+                         * Drag right -> newer candles.
+                         */
                         scrollOffset -=
                                 dx / slot;
 
-                        float maxScroll =
-                                Math.max(
-                                        0,
-                                        candles.size() - 1
-                                );
-
-                        if (scrollOffset < 0) {
-                            scrollOffset = 0;
-                        }
-
-                        if (
-                                scrollOffset
-                                        > maxScroll
-                        ) {
-                            scrollOffset =
-                                    maxScroll;
-                        }
+                        clampScroll();
                     }
 
                 } else {
 
                     /*
-                     * Vertical movement moves
+                     * Vertical finger movement controls
                      * the crosshair.
                      */
                     crosshairY =
@@ -1328,17 +2041,45 @@ public class ForexChartView extends View {
 
                 return true;
 
+            case MotionEvent.ACTION_POINTER_UP:
+
+                /*
+                 * Keep the remaining finger from
+                 * creating a large jump.
+                 */
+                int pointerIndex =
+                        event.getActionIndex();
+
+                if (
+                        pointerIndex
+                                < event.getPointerCount()
+                ) {
+
+                    lastX =
+                            event.getX(
+                                    Math.min(
+                                            0,
+                                            event.getPointerCount() - 1
+                                    )
+                            );
+
+                    lastY =
+                            event.getY(
+                                    Math.min(
+                                            0,
+                                            event.getPointerCount() - 1
+                                    )
+                            );
+                }
+
+                return true;
+
             case MotionEvent.ACTION_UP:
 
             case MotionEvent.ACTION_CANCEL:
 
                 moving = false;
 
-                /*
-                 * Keep the crosshair visible
-                 * after release so the user can
-                 * inspect the selected price.
-                 */
                 performClick();
 
                 return true;
