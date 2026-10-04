@@ -4,6 +4,7 @@ import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
+import android.graphics.RectF;
 import android.view.MotionEvent;
 import android.view.View;
 
@@ -47,6 +48,9 @@ public class ChartDrawingView extends View {
     private final Paint previewPaint =
             new Paint(Paint.ANTI_ALIAS_FLAG);
 
+    private final Paint endpointPaint =
+            new Paint(Paint.ANTI_ALIAS_FLAG);
+
     private final List<Drawing> drawings =
             new ArrayList<>();
 
@@ -56,7 +60,10 @@ public class ChartDrawingView extends View {
     private int selectedDrawingIndex = -1;
 
     private boolean drawingMode = false;
+
     private boolean drawingInProgress = false;
+
+    private boolean movingDrawing = false;
 
     private float startX;
     private float startY;
@@ -64,9 +71,15 @@ public class ChartDrawingView extends View {
     private float currentX;
     private float currentY;
 
+    private float lastMoveX;
+    private float lastMoveY;
+
     private static final float HIT_DISTANCE = 35f;
 
+    private static final float ENDPOINT_RADIUS = 7f;
+
     public ChartDrawingView(Context context) {
+
         super(context);
 
         setBackgroundColor(
@@ -74,14 +87,25 @@ public class ChartDrawingView extends View {
         );
 
         paint.setAntiAlias(true);
+
         paint.setStrokeWidth(3f);
-        paint.setStyle(Paint.Style.STROKE);
+
+        paint.setStyle(
+                Paint.Style.STROKE
+        );
 
         previewPaint.setAntiAlias(true);
+
         previewPaint.setStrokeWidth(3f);
-        previewPaint.setStyle(Paint.Style.STROKE);
+
+        previewPaint.setStyle(
+                Paint.Style.STROKE
+        );
+
+        endpointPaint.setAntiAlias(true);
 
         setFocusable(true);
+
         setClickable(true);
     }
 
@@ -91,7 +115,11 @@ public class ChartDrawingView extends View {
                 DrawingType.HORIZONTAL;
 
         drawingMode = true;
+
         drawingInProgress = false;
+
+        movingDrawing = false;
+
         selectedDrawingIndex = -1;
 
         invalidate();
@@ -103,7 +131,11 @@ public class ChartDrawingView extends View {
                 DrawingType.TREND;
 
         drawingMode = true;
+
         drawingInProgress = false;
+
+        movingDrawing = false;
+
         selectedDrawingIndex = -1;
 
         invalidate();
@@ -112,7 +144,10 @@ public class ChartDrawingView extends View {
     public void disableDrawingMode() {
 
         drawingMode = false;
+
         drawingInProgress = false;
+
+        movingDrawing = false;
 
         invalidate();
     }
@@ -122,9 +157,6 @@ public class ChartDrawingView extends View {
         return drawingMode;
     }
 
-    /**
-     * Selects a drawing by touching near it.
-     */
     public boolean selectDrawing(
             float x,
             float y
@@ -144,15 +176,13 @@ public class ChartDrawingView extends View {
         return foundIndex >= 0;
     }
 
-    /**
-     * Deletes the currently selected drawing.
-     */
     public boolean deleteSelectedDrawing() {
 
-        if (selectedDrawingIndex < 0
-                || selectedDrawingIndex
-                >= drawings.size()) {
-
+        if (
+                selectedDrawingIndex < 0
+                        || selectedDrawingIndex
+                        >= drawings.size()
+        ) {
             return false;
         }
 
@@ -162,14 +192,13 @@ public class ChartDrawingView extends View {
 
         selectedDrawingIndex = -1;
 
+        movingDrawing = false;
+
         invalidate();
 
         return true;
     }
 
-    /**
-     * Removes the latest drawing.
-     */
     public void undoLastDrawing() {
 
         if (!drawings.isEmpty()) {
@@ -180,19 +209,21 @@ public class ChartDrawingView extends View {
 
             selectedDrawingIndex = -1;
 
+            movingDrawing = false;
+
             invalidate();
         }
     }
 
-    /**
-     * Removes every drawing.
-     */
     public void clearDrawings() {
 
         drawings.clear();
 
         selectedDrawingIndex = -1;
+
         drawingInProgress = false;
+
+        movingDrawing = false;
 
         invalidate();
     }
@@ -212,25 +243,35 @@ public class ChartDrawingView extends View {
             MotionEvent event
     ) {
 
-        float x = event.getX();
-        float y = event.getY();
+        float x =
+                event.getX();
 
-        switch (event.getActionMasked()) {
+        float y =
+                event.getY();
+
+        switch (
+                event.getActionMasked()
+        ) {
 
             case MotionEvent.ACTION_DOWN:
 
                 /*
-                 * Drawing mode creates a new drawing.
+                 * Drawing mode:
+                 * start a brand-new drawing.
                  */
                 if (drawingMode) {
 
                     startX = x;
+
                     startY = y;
 
                     currentX = x;
+
                     currentY = y;
 
                     drawingInProgress = true;
+
+                    movingDrawing = false;
 
                     invalidate();
 
@@ -238,70 +279,188 @@ public class ChartDrawingView extends View {
                 }
 
                 /*
-                 * Normal mode selects an existing drawing.
+                 * Normal mode:
+                 * select an existing drawing.
                  */
-                selectDrawing(x, y);
+                int found =
+                        findDrawingAt(
+                                x,
+                                y
+                        );
+
+                selectedDrawingIndex =
+                        found;
+
+                if (found >= 0) {
+
+                    movingDrawing = true;
+
+                    lastMoveX = x;
+
+                    lastMoveY = y;
+
+                } else {
+
+                    movingDrawing = false;
+                }
+
+                invalidate();
 
                 return true;
 
             case MotionEvent.ACTION_MOVE:
 
-                if (!drawingInProgress) {
+                /*
+                 * Creating a new drawing.
+                 */
+                if (drawingInProgress) {
+
+                    currentX = x;
+
+                    currentY = y;
+
+                    if (
+                            selectedType
+                                    == DrawingType.HORIZONTAL
+                    ) {
+
+                        currentY =
+                                startY;
+                    }
+
+                    invalidate();
+
                     return true;
                 }
 
-                currentX = x;
-                currentY = y;
+                /*
+                 * Moving an existing drawing.
+                 */
+                if (
+                        movingDrawing
+                                && selectedDrawingIndex
+                                >= 0
+                                && selectedDrawingIndex
+                                < drawings.size()
+                ) {
 
-                if (selectedType
-                        == DrawingType.HORIZONTAL) {
+                    moveSelectedDrawing(
+                            x - lastMoveX,
+                            y - lastMoveY
+                    );
 
-                    currentY = startY;
+                    lastMoveX = x;
+
+                    lastMoveY = y;
+
+                    invalidate();
+
+                    return true;
                 }
-
-                invalidate();
 
                 return true;
 
             case MotionEvent.ACTION_UP:
 
-                if (!drawingInProgress) {
+                /*
+                 * Finish new drawing.
+                 */
+                if (drawingInProgress) {
+
+                    currentX = x;
+
+                    currentY = y;
+
+                    if (
+                            selectedType
+                                    == DrawingType.HORIZONTAL
+                    ) {
+
+                        currentY =
+                                startY;
+                    }
+
+                    /*
+                     * Do not save an almost-zero
+                     * accidental tap as a drawing.
+                     */
+                    float length =
+                            distance(
+                                    startX,
+                                    startY,
+                                    currentX,
+                                    currentY
+                            );
+
+                    if (
+                            selectedType
+                                    == DrawingType.HORIZONTAL
+                    ) {
+
+                        if (
+                                Math.abs(
+                                        currentY
+                                                - startY
+                                ) < 4f
+                        ) {
+
+                            drawings.add(
+                                    new Drawing(
+                                            selectedType,
+                                            startX,
+                                            startY,
+                                            currentX,
+                                            currentY
+                                    )
+                            );
+                        }
+
+                    } else {
+
+                        if (length >= 12f) {
+
+                            drawings.add(
+                                    new Drawing(
+                                            selectedType,
+                                            startX,
+                                            startY,
+                                            currentX,
+                                            currentY
+                                    )
+                            );
+                        }
+                    }
+
+                    if (!drawings.isEmpty()) {
+
+                        selectedDrawingIndex =
+                                drawings.size() - 1;
+                    }
+
+                    drawingInProgress = false;
+
+                    drawingMode = false;
+
+                    movingDrawing = false;
+
+                    invalidate();
+
+                    performClick();
+
                     return true;
                 }
 
-                currentX = x;
-                currentY = y;
+                movingDrawing = false;
 
-                if (selectedType
-                        == DrawingType.HORIZONTAL) {
-
-                    currentY = startY;
-                }
-
-                drawings.add(
-                        new Drawing(
-                                selectedType,
-                                startX,
-                                startY,
-                                currentX,
-                                currentY
-                        )
-                );
-
-                selectedDrawingIndex =
-                        drawings.size() - 1;
-
-                drawingInProgress = false;
-
-                drawingMode = false;
-
-                invalidate();
+                performClick();
 
                 return true;
 
             case MotionEvent.ACTION_CANCEL:
 
                 drawingInProgress = false;
+
+                movingDrawing = false;
 
                 invalidate();
 
@@ -310,6 +469,109 @@ public class ChartDrawingView extends View {
             default:
 
                 return true;
+        }
+    }
+
+    private void moveSelectedDrawing(
+            float dx,
+            float dy
+    ) {
+
+        if (
+                selectedDrawingIndex < 0
+                        || selectedDrawingIndex
+                        >= drawings.size()
+        ) {
+            return;
+        }
+
+        Drawing drawing =
+                drawings.get(
+                        selectedDrawingIndex
+                );
+
+        if (
+                drawing.type
+                        == DrawingType.HORIZONTAL
+        ) {
+
+            drawing.y1 += dy;
+
+            drawing.y2 =
+                    drawing.y1;
+
+            /*
+             * Keep horizontal lines
+             * inside the chart view.
+             */
+            if (drawing.y1 < 0f) {
+
+                drawing.y1 = 0f;
+
+                drawing.y2 = 0f;
+            }
+
+            if (
+                    drawing.y1
+                            > getHeight()
+            ) {
+
+                drawing.y1 =
+                        getHeight();
+
+                drawing.y2 =
+                        getHeight();
+            }
+
+        } else {
+
+            drawing.x1 += dx;
+
+            drawing.y1 += dy;
+
+            drawing.x2 += dx;
+
+            drawing.y2 += dy;
+
+            /*
+             * Keep trend-line endpoints
+             * reasonably inside the drawing area.
+             */
+            drawing.x1 =
+                    Math.max(
+                            0f,
+                            Math.min(
+                                    getWidth(),
+                                    drawing.x1
+                            )
+                    );
+
+            drawing.x2 =
+                    Math.max(
+                            0f,
+                            Math.min(
+                                    getWidth(),
+                                    drawing.x2
+                            )
+                    );
+
+            drawing.y1 =
+                    Math.max(
+                            0f,
+                            Math.min(
+                                    getHeight(),
+                                    drawing.y1
+                            )
+                    );
+
+            drawing.y2 =
+                    Math.max(
+                            0f,
+                            Math.min(
+                                    getHeight(),
+                                    drawing.y2
+                            )
+                    );
         }
     }
 
@@ -344,8 +606,10 @@ public class ChartDrawingView extends View {
             boolean selected =
                     i == selectedDrawingIndex;
 
-            if (drawing.type
-                    == DrawingType.HORIZONTAL) {
+            if (
+                    drawing.type
+                            == DrawingType.HORIZONTAL
+            ) {
 
                 if (selected) {
 
@@ -353,7 +617,9 @@ public class ChartDrawingView extends View {
                             Color.WHITE
                     );
 
-                    paint.setStrokeWidth(6f);
+                    paint.setStrokeWidth(
+                            6f
+                    );
 
                 } else {
 
@@ -365,8 +631,14 @@ public class ChartDrawingView extends View {
                             )
                     );
 
-                    paint.setStrokeWidth(3f);
+                    paint.setStrokeWidth(
+                            3f
+                    );
                 }
+
+                paint.setStyle(
+                        Paint.Style.STROKE
+                );
 
                 canvas.drawLine(
                         0f,
@@ -376,6 +648,17 @@ public class ChartDrawingView extends View {
                         paint
                 );
 
+                /*
+                 * Selection handles.
+                 */
+                if (selected) {
+
+                    drawHorizontalHandles(
+                            canvas,
+                            drawing
+                    );
+                }
+
             } else {
 
                 if (selected) {
@@ -384,7 +667,9 @@ public class ChartDrawingView extends View {
                             Color.WHITE
                     );
 
-                    paint.setStrokeWidth(6f);
+                    paint.setStrokeWidth(
+                            6f
+                    );
 
                 } else {
 
@@ -396,8 +681,14 @@ public class ChartDrawingView extends View {
                             )
                     );
 
-                    paint.setStrokeWidth(3f);
+                    paint.setStrokeWidth(
+                            3f
+                    );
                 }
+
+                paint.setStyle(
+                        Paint.Style.STROKE
+                );
 
                 canvas.drawLine(
                         drawing.x1,
@@ -416,25 +707,53 @@ public class ChartDrawingView extends View {
         }
     }
 
+    private void drawHorizontalHandles(
+            Canvas canvas,
+            Drawing drawing
+    ) {
+
+        endpointPaint.setStyle(
+                Paint.Style.FILL
+        );
+
+        endpointPaint.setColor(
+                Color.WHITE
+        );
+
+        canvas.drawCircle(
+                14f,
+                drawing.y1,
+                ENDPOINT_RADIUS,
+                endpointPaint
+        );
+
+        canvas.drawCircle(
+                getWidth() - 14f,
+                drawing.y1,
+                ENDPOINT_RADIUS,
+                endpointPaint
+        );
+    }
+
     private void drawTrendEndpoints(
             Canvas canvas,
             Drawing drawing,
             boolean selected
     ) {
 
-        paint.setStyle(
+        endpointPaint.setStyle(
                 Paint.Style.FILL
         );
 
         if (selected) {
 
-            paint.setColor(
+            endpointPaint.setColor(
                     Color.WHITE
             );
 
         } else {
 
-            paint.setColor(
+            endpointPaint.setColor(
                     Color.rgb(
                             220,
                             230,
@@ -446,18 +765,22 @@ public class ChartDrawingView extends View {
         canvas.drawCircle(
                 drawing.x1,
                 drawing.y1,
-                5f,
-                paint
+                selected
+                        ? ENDPOINT_RADIUS
+                        : 5f,
+                endpointPaint
         );
 
         canvas.drawCircle(
                 drawing.x2,
                 drawing.y2,
-                5f,
-                paint
+                selected
+                        ? ENDPOINT_RADIUS
+                        : 5f,
+                endpointPaint
         );
 
-        paint.setStyle(
+        endpointPaint.setStyle(
                 Paint.Style.STROKE
         );
     }
@@ -470,10 +793,18 @@ public class ChartDrawingView extends View {
                 Color.WHITE
         );
 
-        previewPaint.setStrokeWidth(2.5f);
+        previewPaint.setStrokeWidth(
+                2.5f
+        );
 
-        if (selectedType
-                == DrawingType.HORIZONTAL) {
+        previewPaint.setStyle(
+                Paint.Style.STROKE
+        );
+
+        if (
+                selectedType
+                        == DrawingType.HORIZONTAL
+        ) {
 
             canvas.drawLine(
                     0f,
@@ -492,6 +823,27 @@ public class ChartDrawingView extends View {
                     currentY,
                     previewPaint
             );
+
+            /*
+             * Preview endpoint.
+             */
+            previewPaint.setStyle(
+                    Paint.Style.FILL
+            );
+
+            canvas.drawCircle(
+                    startX,
+                    startY,
+                    5f,
+                    previewPaint
+            );
+
+            canvas.drawCircle(
+                    currentX,
+                    currentY,
+                    5f,
+                    previewPaint
+            );
         }
     }
 
@@ -501,8 +853,8 @@ public class ChartDrawingView extends View {
     ) {
 
         /*
-         * Search from newest to oldest so that
-         * the most recent drawing gets priority.
+         * Search newest to oldest so the
+         * newest drawing gets priority.
          */
         for (
                 int i = drawings.size() - 1;
@@ -513,25 +865,35 @@ public class ChartDrawingView extends View {
             Drawing drawing =
                     drawings.get(i);
 
-            if (drawing.type
-                    == DrawingType.HORIZONTAL) {
+            if (
+                    drawing.type
+                            == DrawingType.HORIZONTAL
+            ) {
 
-                if (Math.abs(y - drawing.y1)
-                        <= HIT_DISTANCE) {
+                if (
+                        Math.abs(
+                                y
+                                        - drawing.y1
+                        )
+                                <= HIT_DISTANCE
+                ) {
 
                     return i;
                 }
 
             } else {
 
-                if (distanceToLine(
-                        x,
-                        y,
-                        drawing.x1,
-                        drawing.y1,
-                        drawing.x2,
-                        drawing.y2
-                ) <= HIT_DISTANCE) {
+                if (
+                        distanceToLine(
+                                x,
+                                y,
+                                drawing.x1,
+                                drawing.y1,
+                                drawing.x2,
+                                drawing.y2
+                        )
+                                <= HIT_DISTANCE
+                ) {
 
                     return i;
                 }
@@ -550,10 +912,30 @@ public class ChartDrawingView extends View {
             float y2
     ) {
 
-        float dx = x2 - x1;
-        float dy = y2 - y1;
+        float dx =
+                x2 - x1;
 
-        if (dx == 0f && dy == 0f) {
+        float dy =
+                y2 - y1;
+
+        if (
+                dx == 0f
+                        && dy == 0f
+        ) {
+
+            return distance(
+                    px,
+                    py,
+                    x1,
+                    y1
+            );
+        }
+
+        float denominator =
+                dx * dx
+                        + dy * dy;
+
+        if (denominator <= 0f) {
 
             return distance(
                     px,
@@ -568,18 +950,16 @@ public class ChartDrawingView extends View {
                         (px - x1) * dx
                                 + (py - y1) * dy
                 )
-                        / (
-                        dx * dx
-                                + dy * dy
-                );
+                        / denominator;
 
-        t = Math.max(
-                0f,
-                Math.min(
-                        1f,
-                        t
-                )
-        );
+        t =
+                Math.max(
+                        0f,
+                        Math.min(
+                                1f,
+                                t
+                        )
+                );
 
         float nearestX =
                 x1 + t * dx;
@@ -602,13 +982,24 @@ public class ChartDrawingView extends View {
             float y2
     ) {
 
-        float dx = x1 - x2;
-        float dy = y1 - y2;
+        float dx =
+                x1 - x2;
+
+        float dy =
+                y1 - y2;
 
         return (float)
                 Math.sqrt(
                         dx * dx
                                 + dy * dy
                 );
+    }
+
+    @Override
+    public boolean performClick() {
+
+        super.performClick();
+
+        return true;
     }
 }
