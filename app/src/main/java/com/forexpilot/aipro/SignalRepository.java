@@ -1,12 +1,22 @@
 package com.forexpilot.aipro;
 
+import java.util.List;
+
 public class SignalRepository {
 
     private final MarketDataManager marketDataManager;
     private final SignalCallback callback;
 
     public interface SignalCallback {
+
         void onSignal(Signal signal);
+
+        void onCandles(
+                String symbol,
+                String timeframe,
+                List<Candle> candles
+        );
+
         void onError(String message);
     }
 
@@ -23,6 +33,7 @@ public class SignalRepository {
             String symbol,
             String timeframe
     ) {
+
         marketDataManager.requestCandles(
                 symbol,
                 timeframe,
@@ -30,16 +41,26 @@ public class SignalRepository {
 
                     @Override
                     public void onCandlesReceived(
-                            java.util.List<Candle> candles
+                            List<Candle> candles
                     ) {
+
                         if (candles == null
                                 || candles.size() < 60) {
 
                             callback.onError(
                                     "NOT ENOUGH LIVE CANDLE DATA"
                             );
+
                             return;
                         }
+
+                        // Send the exact candles used by
+                        // SignalEngine to the chart.
+                        callback.onCandles(
+                                symbol,
+                                timeframe,
+                                candles
+                        );
 
                         Signal signal =
                                 SignalEngine.analyze(
