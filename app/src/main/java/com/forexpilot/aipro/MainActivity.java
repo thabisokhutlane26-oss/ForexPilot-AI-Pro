@@ -655,11 +655,49 @@ public class MainActivity extends Activity {
                 params(14)
         );
 
-        // =========================================================
-        // TRADE PLAN
-        // =========================================================
+        // =============================================================
+// ADVANCED PRICE CHART
+// =============================================================
 
-        LinearLayout tradeCard =
+LinearLayout chartCard = createCard();
+
+TextView chartTitle = createText(
+        "PRICE CHART",
+        16,
+        WHITE
+);
+
+chartTitle.setTypeface(
+        Typeface.DEFAULT,
+        Typeface.BOLD
+);
+
+chartCard.addView(
+        chartTitle,
+        params(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                48
+        )
+);
+
+forexChartView = new ForexChartView(this);
+
+chartCard.addView(
+        forexChartView,
+        new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                900
+        )
+);
+
+root.addView(
+        chartCard,
+        params(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+        )
+);
+      LinearLayout tradeCard =
                 createCard();
 
         tradeCard.addView(
