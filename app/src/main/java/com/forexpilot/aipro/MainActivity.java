@@ -1,6 +1,7 @@
 package com.forexpilot.aipro;
 
 import android.app.Activity;
+import android.content.res.Configuration;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
@@ -680,11 +681,42 @@ public class MainActivity extends Activity {
         forexChartView =
                 new ForexChartView(this);
 
+        /*
+         * Responsive chart height.
+         *
+         * Portrait  = 480dp
+         * Landscape = 320dp
+         *
+         * This replaces the old fixed 900px height so the
+         * dashboard does not become unnecessarily tall when
+         * the phone is rotated.
+         */
+        int chartHeightDp;
+
+        if (getResources().getConfiguration().orientation
+                == Configuration.ORIENTATION_LANDSCAPE) {
+
+            chartHeightDp = 320;
+
+        } else {
+
+            chartHeightDp = 480;
+        }
+
+        float density =
+                getResources().getDisplayMetrics().density;
+
+        int chartHeightPx =
+                (int) (
+                        chartHeightDp * density
+                                + 0.5f
+                );
+
         chartCard.addView(
                 forexChartView,
                 new LinearLayout.LayoutParams(
                         LinearLayout.LayoutParams.MATCH_PARENT,
-                        900
+                        chartHeightPx
                 )
         );
 
@@ -1621,10 +1653,8 @@ public class MainActivity extends Activity {
                         }
                 );
 
-        // Always load historical chart candles.
         requestChartCandles();
 
-        // Only start signal scanning when the market is open.
         if (isForexMarketOpen(
                 new Date()
         )) {
@@ -1706,7 +1736,6 @@ public class MainActivity extends Activity {
                                         return;
                                     }
 
-                                    // This is the missing connection.
                                     forexChartView.setCandles(
                                             candles
                                     );
@@ -2023,7 +2052,6 @@ public class MainActivity extends Activity {
                 new Date()
         )) {
 
-            // Historical chart data is still allowed.
             requestChartCandles();
             return;
         }
