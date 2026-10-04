@@ -4,6 +4,8 @@ import java.util.List;
 
 public class MultiTimeframeEngine {
 
+    private static final int EXPECTED_TIMEFRAMES = 6;
+
     public static class TimeframeResult {
 
         private final String timeframe;
@@ -154,17 +156,19 @@ public class MultiTimeframeEngine {
         for (TimeframeResult result : results) {
 
             if (result == null) {
+                waitCount++;
                 continue;
             }
 
-            if (result.getDirection()
-                    == Signal.Direction.BUY) {
+            Signal.Direction direction =
+                    result.getDirection();
+
+            if (direction == Signal.Direction.BUY) {
 
                 buyCount++;
 
             } else if (
-                    result.getDirection()
-                            == Signal.Direction.SELL
+                    direction == Signal.Direction.SELL
             ) {
 
                 sellCount++;
@@ -175,13 +179,43 @@ public class MultiTimeframeEngine {
             }
         }
 
+        /*
+         * The app is designed around six timeframes:
+         *
+         * 5M
+         * 15M
+         * 30M
+         * 1H
+         * 4H
+         * 1D
+         *
+         * Do not claim full confluence until all six
+         * timeframes have returned a result.
+         */
+        if (results.size() < EXPECTED_TIMEFRAMES) {
+
+            return new ConfluenceResult(
+                    buyCount,
+                    sellCount,
+                    waitCount,
+                    Signal.Direction.WAIT,
+                    0
+            );
+        }
+
         Signal.Direction direction =
                 Signal.Direction.WAIT;
 
         int strength = 0;
 
-        if (buyCount > sellCount
-                && buyCount >= 3) {
+        /*
+         * Strong BUY:
+         *
+         * At least 4 of 6 timeframes BUY
+         * and BUY must clearly exceed SELL.
+         */
+        if (buyCount >= 4
+                && buyCount > sellCount) {
 
             direction =
                     Signal.Direction.BUY;
@@ -189,12 +223,18 @@ public class MultiTimeframeEngine {
             strength =
                     calculateStrength(
                             buyCount,
-                            results.size()
+                            EXPECTED_TIMEFRAMES
                     );
 
+        /*
+         * Strong SELL:
+         *
+         * At least 4 of 6 timeframes SELL
+         * and SELL must clearly exceed BUY.
+         */
         } else if (
-                sellCount > buyCount
-                        && sellCount >= 3
+                sellCount >= 4
+                        && sellCount > buyCount
         ) {
 
             direction =
@@ -203,10 +243,15 @@ public class MultiTimeframeEngine {
             strength =
                     calculateStrength(
                             sellCount,
-                            results.size()
+                            EXPECTED_TIMEFRAMES
                     );
         }
 
+        /*
+         * Anything below 4/6 remains WAIT.
+         *
+         * This deliberately reduces weak signals.
+         */
         return new ConfluenceResult(
                 buyCount,
                 sellCount,
@@ -230,6 +275,11 @@ public class MultiTimeframeEngine {
                         / totalTimeframes)
                         * 100.0;
 
+        /*
+         * 6/6 = 100%  -> strength 5
+         * 5/6 = 83%   -> strength 5
+         * 4/6 = 66%   -> strength 4
+         */
         if (percentage >= 83.0) {
             return 5;
         }
@@ -238,14 +288,6 @@ public class MultiTimeframeEngine {
             return 4;
         }
 
-        if (percentage >= 50.0) {
-            return 3;
-        }
-
-        if (percentage >= 33.0) {
-            return 2;
-        }
-
-        return 1;
+        return 0;
     }
 }
