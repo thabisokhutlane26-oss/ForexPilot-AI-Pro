@@ -6,9 +6,14 @@ public class SignalEngine {
 
     private static final int FAST_EMA = 20;
     private static final int SLOW_EMA = 50;
+
     private static final int RSI_PERIOD = 14;
     private static final int ATR_PERIOD = 14;
     private static final int MOMENTUM_PERIOD = 5;
+
+    private static final int MACD_FAST = 12;
+    private static final int MACD_SLOW = 26;
+    private static final int MACD_SIGNAL = 9;
 
     private static final double BUY_RSI_MIN = 50.0;
     private static final double BUY_RSI_MAX = 70.0;
@@ -49,16 +54,28 @@ public class SignalEngine {
         }
 
         double fastEma =
-                IndicatorEngine.ema(candles, FAST_EMA);
+                IndicatorEngine.ema(
+                        candles,
+                        FAST_EMA
+                );
 
         double slowEma =
-                IndicatorEngine.ema(candles, SLOW_EMA);
+                IndicatorEngine.ema(
+                        candles,
+                        SLOW_EMA
+                );
 
         double rsi =
-                IndicatorEngine.rsi(candles, RSI_PERIOD);
+                IndicatorEngine.rsi(
+                        candles,
+                        RSI_PERIOD
+                );
 
         double atr =
-                IndicatorEngine.atr(candles, ATR_PERIOD);
+                IndicatorEngine.atr(
+                        candles,
+                        ATR_PERIOD
+                );
 
         double momentum =
                 IndicatorEngine.momentum(
@@ -73,11 +90,33 @@ public class SignalEngine {
                         SLOW_EMA
                 );
 
+        /*
+         * MACD confirmation.
+         *
+         * MACD line =
+         * EMA(12) - EMA(26)
+         *
+         * Signal line =
+         * EMA(9) of the MACD values.
+         */
+        double[] macd =
+                calculateMacd(
+                        candles,
+                        MACD_FAST,
+                        MACD_SLOW,
+                        MACD_SIGNAL
+                );
+
+        double macdLine = macd[0];
+        double macdSignal = macd[1];
+
         if (Double.isNaN(fastEma)
                 || Double.isNaN(slowEma)
                 || Double.isNaN(rsi)
                 || Double.isNaN(atr)
                 || Double.isNaN(momentum)
+                || Double.isNaN(macdLine)
+                || Double.isNaN(macdSignal)
                 || atr <= 0) {
 
             return createWaitSignal(
@@ -90,45 +129,95 @@ public class SignalEngine {
         int buyScore = 0;
         int sellScore = 0;
 
-        // EMA trend
+        /*
+         * 1. EMA TREND
+         */
         if (fastEma > slowEma) {
             buyScore++;
         } else if (fastEma < slowEma) {
             sellScore++;
         }
 
-        // RSI
+        /*
+         * 2. RSI
+         *
+         * BUY:
+         * RSI between 50 and 70
+         *
+         * SELL:
+         * RSI between 30 and 50
+         */
         if (rsi >= BUY_RSI_MIN
                 && rsi <= BUY_RSI_MAX) {
+
             buyScore++;
         }
 
         if (rsi >= SELL_RSI_MIN
                 && rsi <= SELL_RSI_MAX) {
+
             sellScore++;
         }
 
-        // Momentum
+        /*
+         * 3. MOMENTUM
+         */
         if (momentum > 0) {
             buyScore++;
+
         } else if (momentum < 0) {
+            sellScore++;
+        }
+
+        /*
+         * 4. MACD
+         */
+        if (macdLine > macdSignal
+                && macdLine > 0) {
+
+            buyScore++;
+
+        } else if (macdLine < macdSignal
+                && macdLine < 0) {
+
             sellScore++;
         }
 
         Signal.Direction direction;
 
-        if (buyScore >= 3 && buyScore > sellScore) {
-            direction = Signal.Direction.BUY;
+        /*
+         * Four possible confirmations:
+         *
+         * EMA
+         * RSI
+         * Momentum
+         * MACD
+         *
+         * Require at least 3/4 agreement.
+         */
+        if (buyScore >= 3
+                && buyScore > sellScore) {
+
+            direction =
+                    Signal.Direction.BUY;
 
         } else if (sellScore >= 3
                 && sellScore > buyScore) {
-            direction = Signal.Direction.SELL;
+
+            direction =
+                    Signal.Direction.SELL;
 
         } else {
-            direction = Signal.Direction.WAIT;
+
+            direction =
+                    Signal.Direction.WAIT;
         }
 
+        /*
+         * No trade without sufficient confirmation.
+         */
         if (direction == Signal.Direction.WAIT) {
+
             return new Signal(
                     symbol,
                     timeframe,
@@ -145,6 +234,9 @@ public class SignalEngine {
             );
         }
 
+        /*
+         * ATR-based risk management.
+         */
         double stopLoss =
                 TradeLevelEngine.calculateStopLoss(
                         direction,
@@ -153,6 +245,7 @@ public class SignalEngine {
                 );
 
         if (Double.isNaN(stopLoss)) {
+
             return createWaitSignal(
                     symbol,
                     timeframe,
@@ -197,28 +290,163 @@ public class SignalEngine {
         );
     }
 
+    private static double[] calculateMacd(
+            List<Candle> candles,
+            int fastPeriod,
+            int slowPeriod,
+            int signalPeriod
+    ) {
+        if (candles == null
+                || candles.size()
+                < slowPeriod + signalPeriod) {
+
+            return new double[]{
+                    Double.NaN,
+                    Double.NaN
+            };
+        }
+
+        int size = candles.size();
+
+        double[] macdValues =
+                new double[size];
+
+        for (int i = 0; i < size; i++) {
+
+            List<Candle> subset =
+                    candles.subList(
+                            0,
+                            i + 1
+                    );
+
+            if (subset.size() < slowPeriod) {
+
+                macdValues[i] =
+                        Double.NaN;
+
+                continue;
+            }
+
+            double fastEma =
+                    IndicatorEngine.ema(
+                            subset,
+                            fastPeriod
+                    );
+
+            double slowEma =
+                    IndicatorEngine.ema(
+                            subset,
+                            slowPeriod
+                    );
+
+            if (Double.isNaN(fastEma)
+                    || Double.isNaN(slowEma)) {
+
+                macdValues[i] =
+                        Double.NaN;
+
+            } else {
+
+                macdValues[i] =
+                        fastEma - slowEma;
+            }
+        }
+
+        double[] validMacd =
+                new double[size];
+
+        int validCount = 0;
+
+        for (double value : macdValues) {
+
+            if (!Double.isNaN(value)) {
+
+                validMacd[validCount] =
+                        value;
+
+                validCount++;
+            }
+        }
+
+        if (validCount < signalPeriod) {
+
+            return new double[]{
+                    Double.NaN,
+                    Double.NaN
+            };
+        }
+
+        double multiplier =
+                2.0
+                        / (signalPeriod + 1.0);
+
+        double signalLine = 0.0;
+
+        for (int i = 0;
+             i < signalPeriod;
+             i++) {
+
+            signalLine +=
+                    validMacd[i];
+        }
+
+        signalLine /=
+                signalPeriod;
+
+        for (int i = signalPeriod;
+             i < validCount;
+             i++) {
+
+            signalLine =
+                    ((validMacd[i]
+                            - signalLine)
+                            * multiplier)
+                            + signalLine;
+        }
+
+        double latestMacd =
+                validMacd[validCount - 1];
+
+        return new double[]{
+                latestMacd,
+                signalLine
+        };
+    }
+
     private static Signal createWaitSignal(
             String symbol,
             String timeframe,
             String reason
     ) {
         return new Signal(
-                symbol == null ? "UNKNOWN" : symbol,
-                timeframe == null ? "UNKNOWN" : timeframe,
+                symbol == null
+                        ? "UNKNOWN"
+                        : symbol,
+
+                timeframe == null
+                        ? "UNKNOWN"
+                        : timeframe,
+
                 Signal.Direction.WAIT,
+
                 Double.NaN,
                 Double.NaN,
                 Double.NaN,
                 Double.NaN,
                 Double.NaN,
+
                 Double.NaN,
                 Double.NaN,
+
                 reason,
+
                 System.currentTimeMillis()
         );
     }
 
-    private static boolean isValidPrice(double price) {
+    private static boolean isValidPrice(
+            double price
+    ) {
         return !Double.isNaN(price)
                 && !Double.isInfinite(price)
                 && price > 0;
