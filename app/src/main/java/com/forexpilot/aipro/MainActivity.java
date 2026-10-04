@@ -26,8 +26,16 @@ import java.util.Locale;
 import java.util.TimeZone;
 
 public class MainActivity extends Activity {
-  
+
+    // =============================================================
+    // CHART
+    // =============================================================
+
     private ForexChartView forexChartView;
+
+    // =============================================================
+    // DATA
+    // =============================================================
 
     private SignalRepository signalRepository;
     private MarketDataProvider marketDataProvider;
@@ -105,6 +113,10 @@ public class MainActivity extends Activity {
             "1D"
     };
 
+    // =============================================================
+    // COLORS
+    // =============================================================
+
     private final int BACKGROUND =
             Color.rgb(7, 11, 18);
 
@@ -132,11 +144,16 @@ public class MainActivity extends Activity {
     private final int BLUE =
             Color.rgb(70, 150, 255);
 
+    // =============================================================
+    // CLOCK
+    // =============================================================
+
     private final Handler clockHandler =
             new Handler();
 
     private final Runnable clockRunnable =
             new Runnable() {
+
                 @Override
                 public void run() {
 
@@ -148,6 +165,10 @@ public class MainActivity extends Activity {
                     );
                 }
             };
+
+    // =============================================================
+    // ACTIVITY
+    // =============================================================
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -163,6 +184,10 @@ public class MainActivity extends Activity {
 
         connectToMarketData();
     }
+
+    // =============================================================
+    // DASHBOARD
+    // =============================================================
 
     private void buildDashboard() {
 
@@ -512,6 +537,128 @@ public class MainActivity extends Activity {
 
         root.addView(
                 priceCard,
+                params(14)
+        );
+
+        // =========================================================
+        // LIVE CANDLE CHART
+        // =========================================================
+
+        LinearLayout chartCard =
+                createCard();
+
+        chartCard.addView(
+                createSmallLabel(
+                        "LIVE PRICE CHART • "
+                                + selectedTimeframe
+                )
+        );
+
+        forexChartView =
+                new ForexChartView(this);
+
+        LinearLayout.LayoutParams chartParams =
+                new LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        520
+                );
+
+        chartParams.topMargin = 10;
+
+        chartCard.addView(
+                forexChartView,
+                chartParams
+        );
+
+        // =========================================================
+        // CHART CONTROLS
+        // =========================================================
+
+        LinearLayout chartButtons =
+                new LinearLayout(this);
+
+        chartButtons.setOrientation(
+                LinearLayout.HORIZONTAL
+        );
+
+        Button zoomInButton =
+                new Button(this);
+
+        zoomInButton.setText(
+                "+"
+        );
+
+        zoomInButton.setTextSize(
+                18
+        );
+
+        zoomInButton.setOnClickListener(
+                view -> {
+
+                    if (forexChartView != null) {
+                        forexChartView.zoomIn();
+                    }
+                }
+        );
+
+        Button zoomOutButton =
+                new Button(this);
+
+        zoomOutButton.setText(
+                "−"
+        );
+
+        zoomOutButton.setTextSize(
+                18
+        );
+
+        zoomOutButton.setOnClickListener(
+                view -> {
+
+                    if (forexChartView != null) {
+                        forexChartView.zoomOut();
+                    }
+                }
+        );
+
+        Button latestButton =
+                new Button(this);
+
+        latestButton.setText(
+                "LATEST"
+        );
+
+        latestButton.setOnClickListener(
+                view -> {
+
+                    if (forexChartView != null) {
+                        forexChartView.fitLatest();
+                    }
+                }
+        );
+
+        chartButtons.addView(
+                zoomInButton,
+                weightParams()
+        );
+
+        chartButtons.addView(
+                zoomOutButton,
+                weightParams()
+        );
+
+        chartButtons.addView(
+                latestButton,
+                weightParams()
+        );
+
+        chartCard.addView(
+                chartButtons,
+                params(8)
+        );
+
+        root.addView(
+                chartCard,
                 params(14)
         );
 
@@ -975,6 +1122,7 @@ public class MainActivity extends Activity {
                                 markets[position];
 
                         if (marketName != null) {
+
                             marketName.setText(
                                     selectedMarket
                             );
@@ -1010,6 +1158,7 @@ public class MainActivity extends Activity {
                                 timeframes[position];
 
                         if (momentumText != null) {
+
                             momentumText.setText(
                                     "TIMEFRAME\n"
                                             + selectedTimeframe
@@ -1169,6 +1318,7 @@ public class MainActivity extends Activity {
         } else if (!lastForexOpen) {
 
             if (signalRepository != null) {
+
                 requestCurrentSignal();
             }
         }
@@ -1212,7 +1362,13 @@ public class MainActivity extends Activity {
     private void showMarketClosedState() {
 
         pendingPrimarySignal = null;
+
         mtfResults.clear();
+
+        if (forexChartView != null) {
+
+            forexChartView.clearChart();
+        }
 
         if (signalText != null) {
 
@@ -1325,6 +1481,7 @@ public class MainActivity extends Activity {
                 (hour * 60) + minute;
 
         if (day == Calendar.SATURDAY) {
+
             return false;
         }
 
@@ -1517,13 +1674,6 @@ public class MainActivity extends Activity {
                                                 return;
                                             }
 
-                                            /*
-                                             * Do NOT immediately display the
-                                             * primary BUY/SELL.
-                                             *
-                                             * Store it until all six
-                                             * timeframes have been analysed.
-                                             */
                                             pendingPrimarySignal =
                                                     signal;
 
@@ -1623,7 +1773,7 @@ public class MainActivity extends Activity {
     }
 
     // =============================================================
-    // PRIMARY SIGNAL
+    // PRIMARY SIGNAL + LIVE CHART
     // =============================================================
 
     private void requestCurrentSignal() {
@@ -1675,10 +1825,84 @@ public class MainActivity extends Activity {
                 "PRICE  --"
         );
 
+        // =========================================================
+        // REAL TWELVE DATA SIGNAL
+        // =========================================================
+
         signalRepository.requestSignal(
                 marketToScan,
                 timeframeToScan
         );
+
+        // =========================================================
+        // REAL TWELVE DATA CANDLES FOR CHART
+        // =========================================================
+
+        marketDataProvider.requestCandles(
+                marketToScan,
+                timeframeToScan,
+                new MarketDataManager.MarketDataCallback() {
+
+                    @Override
+                    public void onCandlesReceived(
+                            List<Candle> candles
+                    ) {
+
+                        runOnUiThread(
+                                () -> {
+
+                                    if (!isForexMarketOpen(
+                                            new Date()
+                                    )) {
+                                        return;
+                                    }
+
+                                    if (!marketToScan.equals(
+                                            selectedMarket
+                                    )) {
+                                        return;
+                                    }
+
+                                    if (!timeframeToScan.equals(
+                                            selectedTimeframe
+                                    )) {
+                                        return;
+                                    }
+
+                                    if (forexChartView != null) {
+
+                                        forexChartView.setCandles(
+                                                candles
+                                        );
+                                    }
+                                }
+                        );
+                    }
+
+                    @Override
+                    public void onPriceReceived(
+                            double price
+                    ) {
+                        // Main signal system handles live price.
+                    }
+
+                    @Override
+                    public void onError(
+                            String message
+                    ) {
+                        /*
+                         * Do not fabricate candles.
+                         *
+                         * The chart remains empty if Twelve Data
+                         * does not provide valid candle data.
+                         */
+                    }
+                }
+        );
+
+        // =========================================================
+        // MULTI-TIMEFRAME ANALYSIS
+        // =========================================================
 
         requestMultiTimeframeAnalysis(
                 marketToScan
@@ -1720,6 +1944,7 @@ public class MainActivity extends Activity {
         }
 
         mtfScanning = true;
+
         mtfRequestIndex = 0;
 
         mtfResults.clear();
@@ -1780,10 +2005,6 @@ public class MainActivity extends Activity {
 
             updateMtfConfluenceStatus();
 
-            /*
-             * Now that all six timeframes have been analysed,
-             * allow the MTF engine to make the final decision.
-             */
             applyFinalMtfDecision();
 
             return;
@@ -1864,7 +2085,7 @@ public class MainActivity extends Activity {
                     public void onPriceReceived(
                             double price
                     ) {
-                        // Primary signal controls the main price display.
+                        // Main price display uses the primary signal.
                     }
 
                     @Override
@@ -1901,12 +2122,6 @@ public class MainActivity extends Activity {
                                         return;
                                     }
 
-                                    /*
-                                     * An unavailable timeframe is explicitly
-                                     * recorded as WAIT. This prevents the app
-                                     * from pretending that missing data agrees
-                                     * with the trade.
-                                     */
                                     MultiTimeframeEngine.TimeframeResult waitResult =
                                             new MultiTimeframeEngine.TimeframeResult(
                                                     timeframe,
@@ -2224,16 +2439,6 @@ public class MainActivity extends Activity {
         Signal.Direction primaryDirection =
                 pendingPrimarySignal.getDirection();
 
-        /*
-         * PRIMARY SIGNAL MUST AGREE WITH MTF CONFLUENCE.
-         *
-         * BUY + BUY  = allowed
-         * SELL + SELL = allowed
-         *
-         * BUY + SELL  = WAIT
-         * SELL + BUY  = WAIT
-         * WAIT        = WAIT
-         */
         if (primaryDirection
                 == Signal.Direction.BUY
                 && mtfDirection
@@ -2278,9 +2483,6 @@ public class MainActivity extends Activity {
             return;
         }
 
-        /*
-         * Any disagreement becomes WAIT.
-         */
         showMtfWaitState(
                 "PRIMARY SIGNAL NOT CONFIRMED BY MTF"
         );
@@ -2419,6 +2621,15 @@ public class MainActivity extends Activity {
 
         mtfResults.clear();
 
+        // =========================================================
+        // CLEAR OLD CHART
+        // =========================================================
+
+        if (forexChartView != null) {
+
+            forexChartView.clearChart();
+        }
+
         if (mtfConfluenceText != null) {
 
             mtfConfluenceText.setText(
@@ -2431,6 +2642,7 @@ public class MainActivity extends Activity {
         }
 
         if (marketName != null) {
+
             marketName.setText(
                     selectedMarket
             );
@@ -2516,7 +2728,7 @@ public class MainActivity extends Activity {
     }
 
     // =============================================================
-    // DASHBOARD
+    // DASHBOARD UPDATE
     // =============================================================
 
     private void updateDashboard(
@@ -3148,6 +3360,10 @@ public class MainActivity extends Activity {
         return layoutParams;
     }
 
+    // =============================================================
+    // DESTROY
+    // =============================================================
+
     @Override
     protected void onDestroy() {
 
@@ -3160,10 +3376,12 @@ public class MainActivity extends Activity {
         pendingPrimarySignal = null;
 
         if (signalRepository != null) {
+
             signalRepository.stop();
         }
 
         if (marketDataProvider != null) {
+
             marketDataProvider.stop();
         }
 
