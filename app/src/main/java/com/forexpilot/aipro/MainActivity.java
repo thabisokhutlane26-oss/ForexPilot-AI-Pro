@@ -63,6 +63,8 @@ public class MainActivity extends Activity {
     private TextView mtf4hText;
     private TextView mtf1dText;
 
+    private TextView mtfConfluenceText;
+
     private Spinner marketSpinner;
     private Spinner timeframeSpinner;
     private Button scanButton;
@@ -74,6 +76,9 @@ public class MainActivity extends Activity {
 
     private boolean mtfScanning = false;
     private int mtfRequestIndex = 0;
+
+    private final List<MultiTimeframeEngine.TimeframeResult> mtfResults =
+            new ArrayList<>();
 
     private final String[] markets = {
             "XAU/USD",
@@ -810,6 +815,54 @@ public class MainActivity extends Activity {
                 params(10)
         );
 
+        // =========================================================
+        // REAL MTF CONFLUENCE RESULT
+        // =========================================================
+
+        mtfConfluenceText =
+                createText(
+                        "CONFLUENCE\nWAITING FOR ANALYSIS",
+                        14,
+                        YELLOW,
+                        true
+                );
+
+        mtfConfluenceText.setGravity(
+                Gravity.CENTER
+        );
+
+        mtfConfluenceText.setPadding(
+                14,
+                16,
+                14,
+                16
+        );
+
+        GradientDrawable confluenceBackground =
+                new GradientDrawable();
+
+        confluenceBackground.setColor(
+                Color.rgb(10, 16, 25)
+        );
+
+        confluenceBackground.setStroke(
+                1,
+                CARD_BORDER
+        );
+
+        confluenceBackground.setCornerRadius(
+                14
+        );
+
+        mtfConfluenceText.setBackground(
+                confluenceBackground
+        );
+
+        mtfCard.addView(
+                mtfConfluenceText,
+                params(10)
+        );
+
         root.addView(
                 mtfCard,
                 params(14)
@@ -1115,10 +1168,6 @@ public class MainActivity extends Activity {
         lastForexOpen =
                 forexOpen;
 
-        // =========================================================
-        // SESSION MONITOR
-        // =========================================================
-
         updateSession(
                 sydneySessionText,
                 "SYDNEY",
@@ -1217,6 +1266,17 @@ public class MainActivity extends Activity {
         resetMtfBoxes(
                 "MARKET CLOSED"
         );
+
+        if (mtfConfluenceText != null) {
+
+            mtfConfluenceText.setText(
+                    "CONFLUENCE\nMARKET CLOSED"
+            );
+
+            mtfConfluenceText.setTextColor(
+                    MUTED
+            );
+        }
     }
 
     private boolean isForexMarketOpen(
@@ -1591,11 +1651,35 @@ public class MainActivity extends Activity {
                     "MARKET CLOSED"
             );
 
+            if (mtfConfluenceText != null) {
+
+                mtfConfluenceText.setText(
+                        "CONFLUENCE\nMARKET CLOSED"
+                );
+
+                mtfConfluenceText.setTextColor(
+                        MUTED
+                );
+            }
+
             return;
         }
 
         mtfScanning = true;
         mtfRequestIndex = 0;
+
+        mtfResults.clear();
+
+        if (mtfConfluenceText != null) {
+
+            mtfConfluenceText.setText(
+                    "CONFLUENCE\nSCANNING 6 TIMEFRAMES..."
+            );
+
+            mtfConfluenceText.setTextColor(
+                    YELLOW
+            );
+        }
 
         resetMtfBoxes(
                 "LOADING"
@@ -1757,10 +1841,17 @@ public class MainActivity extends Activity {
                                         return;
                                     }
 
-                                    updateMtfBox(
-                                            timeframe,
-                                            "WAIT",
-                                            YELLOW
+                                    MultiTimeframeEngine.TimeframeResult waitResult =
+                                            new MultiTimeframeEngine.TimeframeResult(
+                                                    timeframe,
+                                                    Signal.Direction.WAIT,
+                                                    "DATA ERROR",
+                                                    Double.NaN,
+                                                    Double.NaN
+                                            );
+
+                                    displayMtfResult(
+                                            waitResult
                                     );
 
                                     mtfRequestIndex++;
@@ -1782,6 +1873,10 @@ public class MainActivity extends Activity {
         if (result == null) {
             return;
         }
+
+        mtfResults.add(
+                result
+        );
 
         String timeframe =
                 result.getTimeframe();
@@ -1941,13 +2036,94 @@ public class MainActivity extends Activity {
             return;
         }
 
-        // The six visible boxes are the direct timeframe
-        // results. The confluence engine is calculated again
-        // from fresh candles on the next complete scan.
-        //
-        // Keep the main connection status focused on the
-        // primary selected timeframe rather than replacing it
-        // with an unverified confluence message.
+        if (mtfConfluenceText == null) {
+            return;
+        }
+
+        MultiTimeframeEngine.ConfluenceResult confluence =
+                MultiTimeframeEngine.calculateConfluence(
+                        mtfResults
+                );
+
+        int buyCount =
+                confluence.getBuyCount();
+
+        int sellCount =
+                confluence.getSellCount();
+
+        int waitCount =
+                confluence.getWaitCount();
+
+        int strength =
+                confluence.getStrength();
+
+        Signal.Direction direction =
+                confluence.getDirection();
+
+        int total =
+                mtfResults.size();
+
+        if (direction == Signal.Direction.BUY) {
+
+            mtfConfluenceText.setText(
+                    "BUY CONFLUENCE\n"
+                            + buyCount
+                            + "/"
+                            + total
+                            + " TIMEFRAMES BUY\n"
+                            + "SELL "
+                            + sellCount
+                            + "  •  WAIT "
+                            + waitCount
+                            + "  •  STRENGTH "
+                            + strength
+                            + "/5"
+            );
+
+            mtfConfluenceText.setTextColor(
+                    GREEN
+            );
+
+        } else if (
+                direction == Signal.Direction.SELL
+        ) {
+
+            mtfConfluenceText.setText(
+                    "SELL CONFLUENCE\n"
+                            + sellCount
+                            + "/"
+                            + total
+                            + " TIMEFRAMES SELL\n"
+                            + "BUY "
+                            + buyCount
+                            + "  •  WAIT "
+                            + waitCount
+                            + "  •  STRENGTH "
+                            + strength
+                            + "/5"
+            );
+
+            mtfConfluenceText.setTextColor(
+                    RED
+            );
+
+        } else {
+
+            mtfConfluenceText.setText(
+                    "NO CLEAR CONFLUENCE\n"
+                            + "BUY "
+                            + buyCount
+                            + "  •  SELL "
+                            + sellCount
+                            + "  •  WAIT "
+                            + waitCount
+                            + "\nWAIT FOR STRONGER ALIGNMENT"
+            );
+
+            mtfConfluenceText.setTextColor(
+                    YELLOW
+            );
+        }
     }
 
     // =============================================================
@@ -1957,6 +2133,19 @@ public class MainActivity extends Activity {
     private void resetForNewSelection() {
 
         mtfScanning = false;
+
+        mtfResults.clear();
+
+        if (mtfConfluenceText != null) {
+
+            mtfConfluenceText.setText(
+                    "CONFLUENCE\nWAITING FOR ANALYSIS"
+            );
+
+            mtfConfluenceText.setTextColor(
+                    YELLOW
+            );
+        }
 
         if (marketName != null) {
             marketName.setText(
