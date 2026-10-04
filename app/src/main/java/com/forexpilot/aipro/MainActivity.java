@@ -27,6 +27,18 @@ import java.util.TimeZone;
 
 public class MainActivity extends Activity {
 
+    // Advanced trading UI components
+    private ForexChartView forexChartView;
+    private RsiChartView rsiChartView;
+    private ChartDrawingView chartDrawingView;
+    private TradeLevelView tradeLevelView;
+    private SignalBadgeView signalBadgeView;
+    private MultiTimeframeView multiTimeframeView;
+
+    // Background alerts
+    private BackgroundScanner backgroundScanner;
+    private SignalAlertCoordinator signalAlertCoordinator;
+    private SignalNotificationManager signalNotificationManager;
     private SignalRepository signalRepository;
     private MarketDataProvider marketDataProvider;
 
