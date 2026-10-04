@@ -1681,64 +1681,62 @@ public class MainActivity extends Activity {
 
     private void requestCurrentSignal() {
 
-        if (signalRepository == null) {
-            return;
-        }
-
-        if (!isForexMarketOpen(
-                new Date()
-        )) {
-
-            showMarketClosedState();
-
-            return;
-        }
-
-        if (mtfScanning) {
-            return;
-        }
-
-        final String marketToScan =
-                selectedMarket;
-
-        final String timeframeToScan =
-                selectedTimeframe;
-
-        pendingPrimarySignal = null;
-        mtfResults.clear();
-
-        resetMtfDisplay();
-
-        connectionStatus.setText(
-                "●  SCANNING "
-                        + marketToScan
-                        + " • "
-                        + timeframeToScan
-        );
-
-        connectionStatus.setTextColor(
-                YELLOW
-        );
-
-        signalText.setText(
-                "WAIT"
-        );
-
-        signalText.setTextColor(
-                YELLOW
-        );
-
-        clearTradeLevels();
-
-        priceText.setText(
-                "PRICE  --"
-        );
-
-        signalRepository.requestSignal(
-                marketToScan,
-                timeframeToScan
-        );
+    if (signalRepository == null) {
+        return;
     }
+
+    if (mtfScanning) {
+        return;
+    }
+
+    final String marketToScan =
+            selectedMarket;
+
+    final String timeframeToScan =
+            selectedTimeframe;
+
+    pendingPrimarySignal = null;
+    mtfResults.clear();
+
+    resetMtfDisplay();
+
+    connectionStatus.setText(
+            "●  LOADING "
+                    + marketToScan
+                    + " • "
+                    + timeframeToScan
+    );
+
+    connectionStatus.setTextColor(
+            YELLOW
+    );
+
+    signalText.setText(
+            "WAIT"
+    );
+
+    signalText.setTextColor(
+            YELLOW
+    );
+
+    clearTradeLevels();
+
+    priceText.setText(
+            "PRICE  --"
+    );
+
+    /*
+     * Always request the latest historical candles.
+     *
+     * This is intentionally NOT blocked when the forex market
+     * is closed. Twelve Data can still return the most recent
+     * completed candles, allowing the chart to remain visible.
+     */
+    signalRepository.requestSignal(
+            marketToScan,
+            timeframeToScan
+    );
+}
 
     // =============================================================
     // MULTI-TIMEFRAME ANALYSIS
