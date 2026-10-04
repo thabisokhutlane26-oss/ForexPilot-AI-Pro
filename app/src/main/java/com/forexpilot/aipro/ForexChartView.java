@@ -175,7 +175,6 @@ public class ForexChartView extends View {
         }
 
         updateSpacing();
-
         clampScroll();
 
         invalidate();
@@ -190,7 +189,6 @@ public class ForexChartView extends View {
         }
 
         updateSpacing();
-
         clampScroll();
 
         invalidate();
@@ -448,7 +446,7 @@ public class ForexChartView extends View {
             if (
                     x < CHART_LEFT - candleWidth
                             || x > width - CHART_RIGHT
-                    ) {
+            ) {
                 continue;
             }
 
@@ -1777,28 +1775,85 @@ public class ForexChartView extends View {
             float factor =
                     detector.getScaleFactor();
 
-            if (!Float.isFinite(factor)
-                    || factor <= 0) {
+            if (
+                    !Float.isFinite(factor)
+                            || factor <= 0
+            ) {
                 return true;
             }
 
+            float focusX =
+                    detector.getFocusX();
+
+            float oldSlot =
+                    candleWidth + spacing;
+
+            int oldStart =
+                    calculateStartIndex();
+
+            int focusIndex =
+                    oldStart
+                            + (int) Math.floor(
+                            (
+                                    focusX
+                                            - CHART_LEFT
+                            ) / oldSlot
+                    );
+
             candleWidth *= factor;
 
-            if (candleWidth
-                    < MIN_CANDLE_WIDTH) {
-
+            if (
+                    candleWidth
+                            < MIN_CANDLE_WIDTH
+            ) {
                 candleWidth =
                         MIN_CANDLE_WIDTH;
             }
 
-            if (candleWidth
-                    > MAX_CANDLE_WIDTH) {
-
+            if (
+                    candleWidth
+                            > MAX_CANDLE_WIDTH
+            ) {
                 candleWidth =
                         MAX_CANDLE_WIDTH;
             }
 
             updateSpacing();
+
+            float newSlot =
+                    candleWidth + spacing;
+
+            int newVisible =
+                    calculateVisibleCount();
+
+            int newMaxStart =
+                    Math.max(
+                            0,
+                            candles.size()
+                                    - newVisible
+                    );
+
+            int desiredStart =
+                    focusIndex
+                            - (int) Math.floor(
+                            (
+                                    focusX
+                                            - CHART_LEFT
+                            ) / newSlot
+                    );
+
+            desiredStart =
+                    Math.max(
+                            0,
+                            Math.min(
+                                    desiredStart,
+                                    newMaxStart
+                            )
+                    );
+
+            scrollOffset =
+                    newMaxStart
+                            - desiredStart;
 
             clampScroll();
 
@@ -1808,13 +1863,6 @@ public class ForexChartView extends View {
         }
     }
 
-    /*
-     * IMPORTANT:
-     *
-     * Prevent the parent ScrollView from stealing
-     * touch gestures while the user is interacting
-     * with the chart.
-     */
     private void setParentScrollEnabled(
             boolean enabled
     ) {
@@ -1844,9 +1892,6 @@ public class ForexChartView extends View {
 
             case MotionEvent.ACTION_DOWN:
 
-                /*
-                 * Lock the parent dashboard immediately.
-                 */
                 setParentScrollEnabled(false);
 
                 lastX =
@@ -1871,10 +1916,6 @@ public class ForexChartView extends View {
 
             case MotionEvent.ACTION_POINTER_DOWN:
 
-                /*
-                 * Keep the dashboard locked during
-                 * two-finger pinch zoom.
-                 */
                 setParentScrollEnabled(false);
 
                 showCrosshair = false;
@@ -1885,10 +1926,6 @@ public class ForexChartView extends View {
 
             case MotionEvent.ACTION_MOVE:
 
-                /*
-                 * Keep the parent from taking the
-                 * gesture while the chart is moving.
-                 */
                 setParentScrollEnabled(false);
 
                 if (
@@ -1926,6 +1963,13 @@ public class ForexChartView extends View {
 
                     if (slot > 0) {
 
+                        /*
+                         * Dragging LEFT moves backward
+                         * through candle history.
+                         *
+                         * Dragging RIGHT returns toward
+                         * the latest candles.
+                         */
                         scrollOffset -=
                                 dx / slot;
 
@@ -1955,37 +1999,36 @@ public class ForexChartView extends View {
 
             case MotionEvent.ACTION_POINTER_UP:
 
-                /*
-                 * Still keep the parent locked because
-                 * another finger may remain on the chart.
-                 */
                 setParentScrollEnabled(false);
 
                 int pointerIndex =
                         event.getActionIndex();
 
-                int remainingPointer = 0;
+                int remainingPointer = -1;
 
-                if (
-                        remainingPointer
-                                < event.getPointerCount()
+                for (
+                        int i = 0;
+                        i < event.getPointerCount();
+                        i++
                 ) {
 
-                    if (
-                            remainingPointer
-                                    != pointerIndex
-                    ) {
-
-                        lastX =
-                                event.getX(
-                                        remainingPointer
-                                );
-
-                        lastY =
-                                event.getY(
-                                        remainingPointer
-                                );
+                    if (i != pointerIndex) {
+                        remainingPointer = i;
+                        break;
                     }
+                }
+
+                if (remainingPointer >= 0) {
+
+                    lastX =
+                            event.getX(
+                                    remainingPointer
+                            );
+
+                    lastY =
+                            event.getY(
+                                    remainingPointer
+                            );
                 }
 
                 return true;
@@ -1994,10 +2037,6 @@ public class ForexChartView extends View {
 
                 moving = false;
 
-                /*
-                 * Release the dashboard only after
-                 * the chart interaction has finished.
-                 */
                 setParentScrollEnabled(true);
 
                 performClick();
@@ -2008,10 +2047,6 @@ public class ForexChartView extends View {
 
                 moving = false;
 
-                /*
-                 * Always release the parent on cancel
-                 * so the dashboard cannot remain locked.
-                 */
                 setParentScrollEnabled(true);
 
                 return true;
