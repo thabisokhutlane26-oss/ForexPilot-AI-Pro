@@ -4,7 +4,6 @@ import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
-import android.graphics.Path;
 import android.view.MotionEvent;
 import android.view.View;
 
@@ -24,7 +23,6 @@ public class ChartDrawingView extends View {
 
         float x1;
         float y1;
-
         float x2;
         float y2;
 
@@ -55,8 +53,9 @@ public class ChartDrawingView extends View {
     private DrawingType selectedType =
             DrawingType.HORIZONTAL;
 
-    private boolean drawingMode = false;
+    private int selectedDrawingIndex = -1;
 
+    private boolean drawingMode = false;
     private boolean drawingInProgress = false;
 
     private float startX;
@@ -64,6 +63,8 @@ public class ChartDrawingView extends View {
 
     private float currentX;
     private float currentY;
+
+    private static final float HIT_DISTANCE = 35f;
 
     public ChartDrawingView(Context context) {
         super(context);
@@ -81,60 +82,93 @@ public class ChartDrawingView extends View {
         previewPaint.setStyle(Paint.Style.STROKE);
 
         setFocusable(true);
+        setClickable(true);
     }
 
-    /**
-     * Select horizontal-line drawing mode.
-     */
     public void setHorizontalMode() {
 
         selectedType =
                 DrawingType.HORIZONTAL;
 
         drawingMode = true;
-
         drawingInProgress = false;
+        selectedDrawingIndex = -1;
 
         invalidate();
     }
 
-    /**
-     * Select trend-line drawing mode.
-     */
     public void setTrendMode() {
 
         selectedType =
                 DrawingType.TREND;
 
         drawingMode = true;
-
         drawingInProgress = false;
+        selectedDrawingIndex = -1;
 
         invalidate();
     }
 
-    /**
-     * Turns drawing mode off.
-     */
     public void disableDrawingMode() {
 
         drawingMode = false;
-
         drawingInProgress = false;
 
         invalidate();
     }
 
-    /**
-     * Returns whether drawing mode is active.
-     */
     public boolean isDrawingMode() {
 
         return drawingMode;
     }
 
     /**
-     * Removes the most recently created drawing.
+     * Selects a drawing by touching near it.
+     */
+    public boolean selectDrawing(
+            float x,
+            float y
+    ) {
+
+        int foundIndex =
+                findDrawingAt(
+                        x,
+                        y
+                );
+
+        selectedDrawingIndex =
+                foundIndex;
+
+        invalidate();
+
+        return foundIndex >= 0;
+    }
+
+    /**
+     * Deletes the currently selected drawing.
+     */
+    public boolean deleteSelectedDrawing() {
+
+        if (selectedDrawingIndex < 0
+                || selectedDrawingIndex
+                >= drawings.size()) {
+
+            return false;
+        }
+
+        drawings.remove(
+                selectedDrawingIndex
+        );
+
+        selectedDrawingIndex = -1;
+
+        invalidate();
+
+        return true;
+    }
+
+    /**
+     * Removes the latest drawing.
      */
     public void undoLastDrawing() {
 
@@ -144,28 +178,33 @@ public class ChartDrawingView extends View {
                     drawings.size() - 1
             );
 
+            selectedDrawingIndex = -1;
+
             invalidate();
         }
     }
 
     /**
-     * Removes all drawings.
+     * Removes every drawing.
      */
     public void clearDrawings() {
 
         drawings.clear();
 
+        selectedDrawingIndex = -1;
         drawingInProgress = false;
 
         invalidate();
     }
 
-    /**
-     * Returns number of saved drawings.
-     */
     public int getDrawingCount() {
 
         return drawings.size();
+    }
+
+    public int getSelectedDrawingIndex() {
+
+        return selectedDrawingIndex;
     }
 
     @Override
@@ -173,23 +212,35 @@ public class ChartDrawingView extends View {
             MotionEvent event
     ) {
 
-        if (!drawingMode) {
-            return false;
-        }
+        float x = event.getX();
+        float y = event.getY();
 
         switch (event.getActionMasked()) {
 
             case MotionEvent.ACTION_DOWN:
 
-                startX = event.getX();
-                startY = event.getY();
+                /*
+                 * Drawing mode creates a new drawing.
+                 */
+                if (drawingMode) {
 
-                currentX = startX;
-                currentY = startY;
+                    startX = x;
+                    startY = y;
 
-                drawingInProgress = true;
+                    currentX = x;
+                    currentY = y;
 
-                invalidate();
+                    drawingInProgress = true;
+
+                    invalidate();
+
+                    return true;
+                }
+
+                /*
+                 * Normal mode selects an existing drawing.
+                 */
+                selectDrawing(x, y);
 
                 return true;
 
@@ -199,8 +250,8 @@ public class ChartDrawingView extends View {
                     return true;
                 }
 
-                currentX = event.getX();
-                currentY = event.getY();
+                currentX = x;
+                currentY = y;
 
                 if (selectedType
                         == DrawingType.HORIZONTAL) {
@@ -218,8 +269,8 @@ public class ChartDrawingView extends View {
                     return true;
                 }
 
-                currentX = event.getX();
-                currentY = event.getY();
+                currentX = x;
+                currentY = y;
 
                 if (selectedType
                         == DrawingType.HORIZONTAL) {
@@ -236,6 +287,9 @@ public class ChartDrawingView extends View {
                                 currentY
                         )
                 );
+
+                selectedDrawingIndex =
+                        drawings.size() - 1;
 
                 drawingInProgress = false;
 
@@ -278,20 +332,41 @@ public class ChartDrawingView extends View {
             Canvas canvas
     ) {
 
-        for (Drawing drawing : drawings) {
+        for (
+                int i = 0;
+                i < drawings.size();
+                i++
+        ) {
+
+            Drawing drawing =
+                    drawings.get(i);
+
+            boolean selected =
+                    i == selectedDrawingIndex;
 
             if (drawing.type
                     == DrawingType.HORIZONTAL) {
 
-                paint.setColor(
-                        Color.rgb(
-                                255,
-                                193,
-                                7
-                        )
-                );
+                if (selected) {
 
-                paint.setStrokeWidth(3f);
+                    paint.setColor(
+                            Color.WHITE
+                    );
+
+                    paint.setStrokeWidth(6f);
+
+                } else {
+
+                    paint.setColor(
+                            Color.rgb(
+                                    255,
+                                    193,
+                                    7
+                            )
+                    );
+
+                    paint.setStrokeWidth(3f);
+                }
 
                 canvas.drawLine(
                         0f,
@@ -303,15 +378,26 @@ public class ChartDrawingView extends View {
 
             } else {
 
-                paint.setColor(
-                        Color.rgb(
-                                80,
-                                170,
-                                255
-                        )
-                );
+                if (selected) {
 
-                paint.setStrokeWidth(3f);
+                    paint.setColor(
+                            Color.WHITE
+                    );
+
+                    paint.setStrokeWidth(6f);
+
+                } else {
+
+                    paint.setColor(
+                            Color.rgb(
+                                    80,
+                                    170,
+                                    255
+                            )
+                    );
+
+                    paint.setStrokeWidth(3f);
+                }
 
                 canvas.drawLine(
                         drawing.x1,
@@ -323,7 +409,8 @@ public class ChartDrawingView extends View {
 
                 drawTrendEndpoints(
                         canvas,
-                        drawing
+                        drawing,
+                        selected
                 );
             }
         }
@@ -331,16 +418,30 @@ public class ChartDrawingView extends View {
 
     private void drawTrendEndpoints(
             Canvas canvas,
-            Drawing drawing
+            Drawing drawing,
+            boolean selected
     ) {
 
         paint.setStyle(
                 Paint.Style.FILL
         );
 
-        paint.setColor(
-                Color.WHITE
-        );
+        if (selected) {
+
+            paint.setColor(
+                    Color.WHITE
+            );
+
+        } else {
+
+            paint.setColor(
+                    Color.rgb(
+                            220,
+                            230,
+                            240
+                    )
+            );
+        }
 
         canvas.drawCircle(
                 drawing.x1,
@@ -366,11 +467,7 @@ public class ChartDrawingView extends View {
     ) {
 
         previewPaint.setColor(
-                Color.rgb(
-                        255,
-                        255,
-                        255
-                )
+                Color.WHITE
         );
 
         previewPaint.setStrokeWidth(2.5f);
@@ -396,5 +493,122 @@ public class ChartDrawingView extends View {
                     previewPaint
             );
         }
+    }
+
+    private int findDrawingAt(
+            float x,
+            float y
+    ) {
+
+        /*
+         * Search from newest to oldest so that
+         * the most recent drawing gets priority.
+         */
+        for (
+                int i = drawings.size() - 1;
+                i >= 0;
+                i--
+        ) {
+
+            Drawing drawing =
+                    drawings.get(i);
+
+            if (drawing.type
+                    == DrawingType.HORIZONTAL) {
+
+                if (Math.abs(y - drawing.y1)
+                        <= HIT_DISTANCE) {
+
+                    return i;
+                }
+
+            } else {
+
+                if (distanceToLine(
+                        x,
+                        y,
+                        drawing.x1,
+                        drawing.y1,
+                        drawing.x2,
+                        drawing.y2
+                ) <= HIT_DISTANCE) {
+
+                    return i;
+                }
+            }
+        }
+
+        return -1;
+    }
+
+    private float distanceToLine(
+            float px,
+            float py,
+            float x1,
+            float y1,
+            float x2,
+            float y2
+    ) {
+
+        float dx = x2 - x1;
+        float dy = y2 - y1;
+
+        if (dx == 0f && dy == 0f) {
+
+            return distance(
+                    px,
+                    py,
+                    x1,
+                    y1
+            );
+        }
+
+        float t =
+                (
+                        (px - x1) * dx
+                                + (py - y1) * dy
+                )
+                        / (
+                        dx * dx
+                                + dy * dy
+                );
+
+        t = Math.max(
+                0f,
+                Math.min(
+                        1f,
+                        t
+                )
+        );
+
+        float nearestX =
+                x1 + t * dx;
+
+        float nearestY =
+                y1 + t * dy;
+
+        return distance(
+                px,
+                py,
+                nearestX,
+                nearestY
+        );
+    }
+
+    private float distance(
+            float x1,
+            float y1,
+            float x2,
+            float y2
+    ) {
+
+        float dx = x1 - x2;
+        float dy = y1 - y2;
+
+        return (float)
+                Math.sqrt(
+                        dx * dx
+                                + dy * dy
+                );
     }
 }
