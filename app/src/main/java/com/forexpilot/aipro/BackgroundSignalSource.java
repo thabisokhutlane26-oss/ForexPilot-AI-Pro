@@ -1,10 +1,12 @@
 package com.forexpilot.aipro;
 
 /**
- * Adapts SignalRepository to BackgroundScanner.ScannerSource.
+ * Adapts the existing SignalRepository to BackgroundScanner.
  *
- * Uses the existing real Twelve Data -> SignalEngine pipeline.
- * No fake signals and no second data provider.
+ * SignalRepository currently owns its callback, so this adapter
+ * cannot directly receive the result from requestSignal().
+ *
+ * Background scanning will be connected through MainActivity.
  */
 public class BackgroundSignalSource
         implements BackgroundScanner.ScannerSource {
@@ -36,20 +38,19 @@ public class BackgroundSignalSource
             return;
         }
 
-        signalRepository.requestSignal(
-                market,
-                timeframe,
-                new SignalRepository.SignalCallback() {
-                    @Override
-                    public void onSignal(Signal signal) {
-                        callback.onSignal(signal);
-                    }
-
-                    @Override
-                    public void onError(String message) {
-                        callback.onError(message);
-                    }
-                }
+        /*
+         * SignalRepository currently exposes:
+         *
+         * requestSignal(String symbol, String timeframe)
+         *
+         * and owns its callback internally.
+         *
+         * Therefore we do not call it here with a third callback
+         * argument. BackgroundScanner integration will be wired
+         * through a dedicated source in MainActivity.
+         */
+        callback.onError(
+                "BACKGROUND SIGNAL SOURCE NOT YET CONNECTED"
         );
     }
 }
