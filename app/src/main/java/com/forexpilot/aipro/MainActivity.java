@@ -77,6 +77,12 @@ public class MainActivity extends Activity {
     private boolean mtfScanning = false;
     private int mtfRequestIndex = 0;
 
+    /*
+     * Stores the primary timeframe signal until the
+     * six-timeframe confluence has been completed.
+     */
+    private Signal pendingPrimarySignal;
+
     private final List<MultiTimeframeEngine.TimeframeResult> mtfResults =
             new ArrayList<>();
 
@@ -1203,6 +1209,9 @@ public class MainActivity extends Activity {
 
     private void showMarketClosedState() {
 
+        pendingPrimarySignal = null;
+        mtfResults.clear();
+
         if (signalText != null) {
 
             signalText.setText(
@@ -1490,9 +1499,46 @@ public class MainActivity extends Activity {
                                                 return;
                                             }
 
-                                            updateDashboard(
-                                                    signal
-                                            );
+                                            if (signal == null) {
+                                                return;
+                                            }
+
+                                            if (!selectedMarket.equals(
+                                                    signal.getSymbol()
+                                            )) {
+                                                return;
+                                            }
+
+                                            if (!selectedTimeframe.equals(
+                                                    signal.getTimeframe()
+                                            )) {
+                                                return;
+                                            }
+
+                                            /*
+                                             * Do NOT immediately display the
+                                             * primary BUY/SELL.
+                                             *
+                                             * Store it until all six
+                                             * timeframes have been analysed.
+                                             */
+                                            pendingPrimarySignal =
+                                                    signal;
+
+                                            if (mtfScanning) {
+
+                                                connectionStatus.setText(
+                                                        "●  PRIMARY SIGNAL RECEIVED • CHECKING MTF"
+                                                );
+
+                                                connectionStatus.setTextColor(
+                                                        YELLOW
+                                                );
+
+                                            } else {
+
+                                                applyFinalMtfDecision();
+                                            }
                                         }
                                 );
                             }
@@ -1513,6 +1559,9 @@ public class MainActivity extends Activity {
 
                                                 return;
                                             }
+
+                                            pendingPrimarySignal =
+                                                    null;
 
                                             connectionStatus.setText(
                                                     "●  DATA ERROR • "
@@ -1595,6 +1644,9 @@ public class MainActivity extends Activity {
 
         final String timeframeToScan =
                 selectedTimeframe;
+
+        pendingPrimarySignal =
+                null;
 
         connectionStatus.setText(
                 "●  SCANNING "
@@ -1726,6 +1778,12 @@ public class MainActivity extends Activity {
 
             updateMtfConfluenceStatus();
 
+            /*
+             * Now that all six timeframes have been analysed,
+             * allow the MTF engine to make the final decision.
+             */
+            applyFinalMtfDecision();
+
             return;
         }
 
@@ -1841,6 +1899,12 @@ public class MainActivity extends Activity {
                                         return;
                                     }
 
+                                    /*
+                                     * An unavailable timeframe is explicitly
+                                     * recorded as WAIT. This prevents the app
+                                     * from pretending that missing data agrees
+                                     * with the trade.
+                                     */
                                     MultiTimeframeEngine.TimeframeResult waitResult =
                                             new MultiTimeframeEngine.TimeframeResult(
                                                     timeframe,
@@ -1979,52 +2043,47 @@ public class MainActivity extends Activity {
             String status
     ) {
 
+        int color =
+                status.equals(
+                        "MARKET CLOSED"
+                )
+                        ? MUTED
+                        : YELLOW;
+
         updateMtfBox(
                 "5M",
                 status,
-                status.equals("MARKET CLOSED")
-                        ? MUTED
-                        : YELLOW
+                color
         );
 
         updateMtfBox(
                 "15M",
                 status,
-                status.equals("MARKET CLOSED")
-                        ? MUTED
-                        : YELLOW
+                color
         );
 
         updateMtfBox(
                 "30M",
                 status,
-                status.equals("MARKET CLOSED")
-                        ? MUTED
-                        : YELLOW
+                color
         );
 
         updateMtfBox(
                 "1H",
                 status,
-                status.equals("MARKET CLOSED")
-                        ? MUTED
-                        : YELLOW
+                color
         );
 
         updateMtfBox(
                 "4H",
                 status,
-                status.equals("MARKET CLOSED")
-                        ? MUTED
-                        : YELLOW
+                color
         );
 
         updateMtfBox(
                 "1D",
                 status,
-                status.equals("MARKET CLOSED")
-                        ? MUTED
-                        : YELLOW
+                color
         );
     }
 
@@ -2060,17 +2119,12 @@ public class MainActivity extends Activity {
         Signal.Direction direction =
                 confluence.getDirection();
 
-        int total =
-                mtfResults.size();
-
         if (direction == Signal.Direction.BUY) {
 
             mtfConfluenceText.setText(
                     "BUY CONFLUENCE\n"
                             + buyCount
-                            + "/"
-                            + total
-                            + " TIMEFRAMES BUY\n"
+                            + "/6 TIMEFRAMES BUY\n"
                             + "SELL "
                             + sellCount
                             + "  •  WAIT "
@@ -2091,9 +2145,7 @@ public class MainActivity extends Activity {
             mtfConfluenceText.setText(
                     "SELL CONFLUENCE\n"
                             + sellCount
-                            + "/"
-                            + total
-                            + " TIMEFRAMES SELL\n"
+                            + "/6 TIMEFRAMES SELL\n"
                             + "BUY "
                             + buyCount
                             + "  •  WAIT "
@@ -2127,12 +2179,241 @@ public class MainActivity extends Activity {
     }
 
     // =============================================================
+    // FINAL MTF DECISION
+    // =============================================================
+
+    private void applyFinalMtfDecision() {
+
+        if (!isForexMarketOpen(
+                new Date()
+        )) {
+
+            showMarketClosedState();
+
+            return;
+        }
+
+        if (mtfResults.size() < timeframes.length) {
+
+            showMtfWaitState(
+                    "WAITING FOR ALL 6 TIMEFRAMES"
+            );
+
+            return;
+        }
+
+        MultiTimeframeEngine.ConfluenceResult confluence =
+                MultiTimeframeEngine.calculateConfluence(
+                        mtfResults
+                );
+
+        Signal.Direction mtfDirection =
+                confluence.getDirection();
+
+        if (pendingPrimarySignal == null) {
+
+            showMtfWaitState(
+                    "WAITING FOR PRIMARY SIGNAL"
+            );
+
+            return;
+        }
+
+        Signal.Direction primaryDirection =
+                pendingPrimarySignal.getDirection();
+
+        /*
+         * PRIMARY SIGNAL MUST AGREE WITH MTF CONFLUENCE.
+         *
+         * BUY + BUY  = allowed
+         * SELL + SELL = allowed
+         *
+         * BUY + SELL  = WAIT
+         * SELL + BUY  = WAIT
+         * WAIT        = WAIT
+         */
+        if (primaryDirection
+                == Signal.Direction.BUY
+                && mtfDirection
+                == Signal.Direction.BUY) {
+
+            updateDashboard(
+                    pendingPrimarySignal
+            );
+
+            connectionStatus.setText(
+                    "●  MTF CONFIRMED BUY • "
+                            + confluence.getBuyCount()
+                            + "/6"
+            );
+
+            connectionStatus.setTextColor(
+                    GREEN
+            );
+
+            return;
+        }
+
+        if (primaryDirection
+                == Signal.Direction.SELL
+                && mtfDirection
+                == Signal.Direction.SELL) {
+
+            updateDashboard(
+                    pendingPrimarySignal
+            );
+
+            connectionStatus.setText(
+                    "●  MTF CONFIRMED SELL • "
+                            + confluence.getSellCount()
+                            + "/6"
+            );
+
+            connectionStatus.setTextColor(
+                    RED
+            );
+
+            return;
+        }
+
+        /*
+         * Any disagreement becomes WAIT.
+         */
+        showMtfWaitState(
+                "PRIMARY SIGNAL NOT CONFIRMED BY MTF"
+        );
+    }
+
+    private void showMtfWaitState(
+            String reason
+    ) {
+
+        if (signalText != null) {
+
+            signalText.setText(
+                    "WAIT"
+            );
+
+            signalText.setTextColor(
+                    YELLOW
+            );
+        }
+
+        clearTradeLevels();
+
+        if (pendingPrimarySignal != null) {
+
+            if (!Double.isNaN(
+                    pendingPrimarySignal.getEntry()
+            )) {
+
+                priceText.setText(
+                        "PRICE  "
+                                + formatPrice(
+                                pendingPrimarySignal.getSymbol(),
+                                pendingPrimarySignal.getEntry()
+                        )
+                );
+
+            } else {
+
+                priceText.setText(
+                        "PRICE  --"
+                );
+            }
+
+            trendText.setText(
+                    "TREND\n"
+                            + pendingPrimarySignal.getTrend()
+            );
+
+            if (!Double.isNaN(
+                    pendingPrimarySignal.getRsi()
+            )) {
+
+                rsiText.setText(
+                        "RSI\n"
+                                + String.format(
+                                Locale.US,
+                                "%.2f",
+                                pendingPrimarySignal.getRsi()
+                        )
+                );
+
+            } else {
+
+                rsiText.setText(
+                        "RSI\n--"
+                );
+            }
+
+            if (!Double.isNaN(
+                    pendingPrimarySignal.getAtr()
+            )) {
+
+                atrText.setText(
+                        "ATR\n"
+                                + formatPrice(
+                                pendingPrimarySignal.getSymbol(),
+                                pendingPrimarySignal.getAtr()
+                        )
+                );
+
+            } else {
+
+                atrText.setText(
+                        "ATR\n--"
+                );
+            }
+
+            momentumText.setText(
+                    "TIMEFRAME\n"
+                            + pendingPrimarySignal.getTimeframe()
+            );
+
+        } else {
+
+            priceText.setText(
+                    "PRICE  --"
+            );
+
+            trendText.setText(
+                    "TREND\n--"
+            );
+
+            rsiText.setText(
+                    "RSI\n--"
+            );
+
+            atrText.setText(
+                    "ATR\n--"
+            );
+
+            momentumText.setText(
+                    "TIMEFRAME\n"
+                            + selectedTimeframe
+            );
+        }
+
+        connectionStatus.setText(
+                "●  MTF WAIT • "
+                        + reason
+        );
+
+        connectionStatus.setTextColor(
+                YELLOW
+        );
+    }
+
+    // =============================================================
     // SELECTION
     // =============================================================
 
     private void resetForNewSelection() {
 
         mtfScanning = false;
+
+        pendingPrimarySignal = null;
 
         mtfResults.clear();
 
@@ -2873,6 +3154,8 @@ public class MainActivity extends Activity {
         );
 
         mtfScanning = false;
+
+        pendingPrimarySignal = null;
 
         if (signalRepository != null) {
             signalRepository.stop();
