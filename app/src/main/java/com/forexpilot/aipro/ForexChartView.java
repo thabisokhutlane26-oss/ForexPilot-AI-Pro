@@ -4,6 +4,7 @@ import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
+import android.graphics.Path;
 import android.graphics.RectF;
 import android.view.MotionEvent;
 import android.view.ScaleGestureDetector;
@@ -26,6 +27,9 @@ public class ForexChartView extends View {
             new ArrayList<>();
 
     private final ScaleGestureDetector scaleDetector;
+
+    private List<ForexPilotIndicator.Result> indicatorResults =
+            new ArrayList<>();
 
     private float lastX;
     private float lastY;
@@ -85,6 +89,15 @@ public class ForexChartView extends View {
     private static final int CROSSHAIR =
             Color.rgb(205, 215, 225);
 
+    private static final int INDICATOR_BUY =
+            Color.rgb(0, 235, 140);
+
+    private static final int INDICATOR_SELL =
+            Color.rgb(255, 75, 95);
+
+    private static final int INDICATOR_LINE =
+            Color.rgb(255, 190, 55);
+
     public ForexChartView(Context context) {
 
         super(context);
@@ -113,6 +126,15 @@ public class ForexChartView extends View {
             candles.addAll(newCandles);
         }
 
+        /*
+         * The indicator always uses the same real candles
+         * currently displayed by the chart.
+         */
+        indicatorResults =
+                ForexPilotIndicator.calculate(
+                        candles
+                );
+
         scrollOffset = 0f;
 
         crosshairX = -1f;
@@ -128,6 +150,8 @@ public class ForexChartView extends View {
     public void clearChart() {
 
         candles.clear();
+
+        indicatorResults.clear();
 
         scrollOffset = 0f;
 
@@ -373,6 +397,43 @@ public class ForexChartView extends View {
                     );
         }
 
+        /*
+         * Include the ForexPilot indicator line in the
+         * visible price range.
+         */
+        for (
+                int i = startIndex;
+                i < endIndex
+                        && i < indicatorResults.size();
+                i++
+        ) {
+
+            ForexPilotIndicator.Result result =
+                    indicatorResults.get(i);
+
+            if (result == null) {
+                continue;
+            }
+
+            double trailingStop =
+                    result.getTrailingStop();
+
+            if (Double.isFinite(trailingStop)) {
+
+                minPrice =
+                        Math.min(
+                                minPrice,
+                                trailingStop
+                        );
+
+                maxPrice =
+                        Math.max(
+                                maxPrice,
+                                trailingStop
+                        );
+            }
+        }
+
         if (
                 !Double.isFinite(minPrice)
                         || !Double.isFinite(maxPrice)
@@ -434,6 +495,9 @@ public class ForexChartView extends View {
         float chartHeight =
                 chartBottom - chartTop;
 
+        /*
+         * Draw the real candles first.
+         */
         for (
                 int i = startIndex;
                 i < endIndex;
@@ -638,6 +702,20 @@ public class ForexChartView extends View {
             }
         }
 
+        /*
+         * Draw the ForexPilot trailing indicator after
+         * candles so that it remains clearly visible.
+         */
+        drawForexPilotIndicator(
+                canvas,
+                startIndex,
+                endIndex,
+                minPrice,
+                priceRange,
+                chartTop,
+                chartHeight
+        );
+
         drawLatestPriceLine(
                 canvas,
                 endIndex - 1,
@@ -671,6 +749,9 @@ public class ForexChartView extends View {
 
         drawChartBorder(canvas);
 
+        /*
+         * Existing ForexPilot trade signal marker.
+         */
         drawSignalMarker(
                 canvas,
                 startIndex,
@@ -678,6 +759,327 @@ public class ForexChartView extends View {
                 priceRange,
                 chartTop,
                 chartHeight
+        );
+    }
+
+    private void drawForexPilotIndicator(
+            Canvas canvas,
+            int startIndex,
+            int endIndex,
+            double minPrice,
+            double range,
+            float chartTop,
+            float chartHeight
+    ) {
+
+        if (indicatorResults == null
+                || indicatorResults.isEmpty()) {
+            return;
+        }
+
+        Path path =
+                new Path();
+
+        boolean pathStarted = false;
+
+        for (
+                int i = startIndex;
+                i < endIndex
+                        && i < indicatorResults.size();
+                i++
+        ) {
+
+            ForexPilotIndicator.Result result =
+                    indicatorResults.get(i);
+
+            if (result == null) {
+                pathStarted = false;
+                continue;
+            }
+
+            double value =
+                    result.getTrailingStop();
+
+            if (!Double.isFinite(value)) {
+                pathStarted = false;
+                continue;
+            }
+
+            float x =
+                    getCandleX(
+                            i,
+                            startIndex
+                    );
+
+            float y =
+                    priceToY(
+                            value,
+                            minPrice,
+                            range,
+                            chartTop,
+                            chartHeight
+                    );
+
+            if (!pathStarted) {
+
+                path.moveTo(
+                        x,
+                        y
+                );
+
+                pathStarted = true;
+
+            } else {
+
+                path.lineTo(
+                        x,
+                        y
+                );
+            }
+        }
+
+        /*
+         * Main trailing indicator line.
+         */
+        paint.setStyle(
+                Paint.Style.STROKE
+        );
+
+        paint.setStrokeWidth(2.5f);
+
+        paint.setStrokeCap(
+                Paint.Cap.ROUND
+        );
+
+        paint.setStrokeJoin(
+                Paint.Join.ROUND
+        );
+
+        paint.setColor(
+                INDICATOR_LINE
+        );
+
+        canvas.drawPath(
+                path,
+                paint
+        );
+
+        paint.setStrokeCap(
+                Paint.Cap.BUTT
+        );
+
+        /*
+         * Draw every BUY/SELL transition on its
+         * corresponding candle.
+         */
+        for (
+                int i = startIndex;
+                i < endIndex
+                        && i < indicatorResults.size();
+                i++
+        ) {
+
+            ForexPilotIndicator.Result result =
+                    indicatorResults.get(i);
+
+            if (result == null) {
+                continue;
+            }
+
+            ForexPilotIndicator.SignalType type =
+                    result.getSignalType();
+
+            if (
+                    type
+                            == ForexPilotIndicator.SignalType.NONE
+            ) {
+                continue;
+            }
+
+            Candle candle =
+                    candles.get(i);
+
+            if (!isValidCandle(candle)) {
+                continue;
+            }
+
+            float x =
+                    getCandleX(
+                            i,
+                            startIndex
+                    );
+
+            if (
+                    x < CHART_LEFT - 35f
+                            || x > getWidth() - CHART_RIGHT + 35f
+            ) {
+                continue;
+            }
+
+            boolean buy =
+                    type
+                            == ForexPilotIndicator.SignalType.BUY;
+
+            float priceY =
+                    priceToY(
+                            buy
+                                    ? candle.getLow()
+                                    : candle.getHigh(),
+                            minPrice,
+                            range,
+                            chartTop,
+                            chartHeight
+                    );
+
+            drawIndicatorSignalMarker(
+                    canvas,
+                    x,
+                    priceY,
+                    buy
+            );
+        }
+    }
+
+    private void drawIndicatorSignalMarker(
+            Canvas canvas,
+            float x,
+            float candleY,
+            boolean buy
+    ) {
+
+        float markerY =
+                buy
+                        ? candleY + 27f
+                        : candleY - 27f;
+
+        int color =
+                buy
+                        ? INDICATOR_BUY
+                        : INDICATOR_SELL;
+
+        paint.setStyle(
+                Paint.Style.FILL
+        );
+
+        paint.setColor(color);
+
+        Path arrow =
+                new Path();
+
+        if (buy) {
+
+            arrow.moveTo(
+                    x,
+                    markerY - 14f
+            );
+
+            arrow.lineTo(
+                    x - 9f,
+                    markerY - 2f
+            );
+
+            arrow.lineTo(
+                    x - 4f,
+                    markerY - 2f
+            );
+
+            arrow.lineTo(
+                    x - 4f,
+                    markerY + 12f
+            );
+
+            arrow.lineTo(
+                    x + 4f,
+                    markerY + 12f
+            );
+
+            arrow.lineTo(
+                    x + 4f,
+                    markerY - 2f
+            );
+
+            arrow.lineTo(
+                    x + 9f,
+                    markerY - 2f
+            );
+
+            arrow.close();
+
+        } else {
+
+            arrow.moveTo(
+                    x,
+                    markerY + 14f
+            );
+
+            arrow.lineTo(
+                    x - 9f,
+                    markerY + 2f
+            );
+
+            arrow.lineTo(
+                    x - 4f,
+                    markerY + 2f
+            );
+
+            arrow.lineTo(
+                    x - 4f,
+                    markerY - 12f
+            );
+
+            arrow.lineTo(
+                    x + 4f,
+                    markerY - 12f
+            );
+
+            arrow.lineTo(
+                    x + 4f,
+                    markerY + 2f
+            );
+
+            arrow.lineTo(
+                    x + 9f,
+                    markerY + 2f
+            );
+
+            arrow.close();
+        }
+
+        canvas.drawPath(
+                arrow,
+                paint
+        );
+
+        /*
+         * BUY / SELL label.
+         */
+        paint.setTextAlign(
+                Paint.Align.CENTER
+        );
+
+        paint.setTextSize(12f);
+
+        paint.setTypeface(
+                android.graphics.Typeface.DEFAULT_BOLD
+        );
+
+        paint.setColor(Color.WHITE);
+
+        canvas.drawText(
+                buy ? "BUY" : "SELL",
+                x,
+                buy
+                        ? markerY + 29f
+                        : markerY - 20f,
+                paint
+        );
+
+        paint.setTypeface(
+                android.graphics.Typeface.DEFAULT
+        );
+
+        paint.setTextAlign(
+                Paint.Align.LEFT
         );
     }
 
