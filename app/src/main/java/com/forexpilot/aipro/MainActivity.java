@@ -26,6 +26,8 @@ import java.util.Locale;
 import java.util.TimeZone;
 
 public class MainActivity extends Activity {
+  
+    private ForexChartView forexChartView;
 
     private SignalRepository signalRepository;
     private MarketDataProvider marketDataProvider;
