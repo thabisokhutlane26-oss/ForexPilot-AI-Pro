@@ -42,6 +42,8 @@ public class ForexChartView extends View {
 
     private boolean showCrosshair = false;
 
+    private int selectedCandleIndex = -1;
+
     private double entry = Double.NaN;
     private double stopLoss = Double.NaN;
     private double tp1 = Double.NaN;
@@ -80,6 +82,9 @@ public class ForexChartView extends View {
     private static final int BEAR =
             Color.rgb(255, 70, 90);
 
+    private static final int CROSSHAIR =
+            Color.rgb(205, 215, 225);
+
     public ForexChartView(Context context) {
 
         super(context);
@@ -112,7 +117,10 @@ public class ForexChartView extends View {
 
         crosshairX = -1f;
         crosshairY = -1f;
+
         showCrosshair = false;
+
+        selectedCandleIndex = -1;
 
         invalidate();
     }
@@ -127,6 +135,8 @@ public class ForexChartView extends View {
         crosshairY = -1f;
 
         showCrosshair = false;
+
+        selectedCandleIndex = -1;
 
         invalidate();
     }
@@ -598,6 +608,34 @@ public class ForexChartView extends View {
                         Paint.Style.FILL
                 );
             }
+
+            if (i == selectedCandleIndex) {
+
+                paint.setStyle(
+                        Paint.Style.STROKE
+                );
+
+                paint.setStrokeWidth(2f);
+
+                paint.setColor(
+                        Color.WHITE
+                );
+
+                float highlight =
+                        5f;
+
+                canvas.drawRect(
+                        body.left - highlight,
+                        body.top - highlight,
+                        body.right + highlight,
+                        body.bottom + highlight,
+                        paint
+                );
+
+                paint.setStyle(
+                        Paint.Style.FILL
+                );
+            }
         }
 
         drawLatestPriceLine(
@@ -1030,15 +1068,13 @@ public class ForexChartView extends View {
             return;
         }
 
-        paint.setColor(
-                Color.rgb(180, 190, 205)
+        paint.setStyle(
+                Paint.Style.STROKE
         );
 
         paint.setStrokeWidth(1f);
 
-        paint.setStyle(
-                Paint.Style.STROKE
-        );
+        paint.setColor(CROSSHAIR);
 
         canvas.drawLine(
                 CHART_LEFT,
@@ -1059,6 +1095,62 @@ public class ForexChartView extends View {
         paint.setStyle(
                 Paint.Style.FILL
         );
+
+        int index =
+                selectedCandleIndex;
+
+        if (
+                index < 0
+                        || index >= candles.size()
+        ) {
+            index =
+                    getCandleIndexFromX(
+                            crosshairX
+                    );
+        }
+
+        if (
+                index >= 0
+                        && index < candles.size()
+        ) {
+
+            Candle candle =
+                    candles.get(index);
+
+            if (isValidCandle(candle)) {
+
+                drawCandleInfo(
+                        canvas,
+                        candle
+                );
+
+                drawCrosshairPrice(
+                        canvas
+                );
+
+                drawCrosshairTime(
+                        canvas,
+                        candle
+                );
+
+                return;
+            }
+        }
+
+        drawCrosshairPrice(
+                canvas
+        );
+    }
+
+    private void drawCrosshairPrice(
+            Canvas canvas
+    ) {
+
+        float right =
+                getWidth() - CHART_RIGHT;
+
+        double price =
+                getPriceFromCrosshair();
 
         paint.setColor(
                 Color.rgb(25, 35, 48)
@@ -1082,83 +1174,192 @@ public class ForexChartView extends View {
         paint.setTextSize(15f);
 
         canvas.drawText(
-                formatPrice(
-                        getPriceFromCrosshair()
-                ),
+                formatPrice(price),
                 right + 7f,
                 crosshairY + 5f,
                 paint
         );
+    }
 
-        int index =
-                getCandleIndexFromX(
-                        crosshairX
+    private void drawCrosshairTime(
+            Canvas canvas,
+            Candle candle
+    ) {
+
+        float right =
+                getWidth() - CHART_RIGHT;
+
+        float bottom =
+                getHeight() - CHART_BOTTOM;
+
+        String time =
+                formatCandleTime(
+                        candle.getTimestamp()
                 );
 
-        if (
-                index >= 0
-                        && index < candles.size()
-        ) {
+        float boxWidth =
+                118f;
 
-            Candle candle =
-                    candles.get(index);
-
-            if (candle != null) {
-
-                paint.setColor(
-                        Color.rgb(25, 35, 48)
+        float left =
+                Math.max(
+                        CHART_LEFT,
+                        Math.min(
+                                crosshairX
+                                        - boxWidth / 2f,
+                                right - boxWidth
+                        )
                 );
 
-                String time =
-                        formatCandleTime(
-                                candle.getTimestamp()
-                        );
+        paint.setColor(
+                Color.rgb(25, 35, 48)
+        );
 
-                float boxWidth =
-                        110f;
-
-                float left =
-                        Math.max(
-                                CHART_LEFT,
-                                Math.min(
-                                        crosshairX - boxWidth / 2f,
-                                        right - boxWidth
-                                )
-                        );
-
-                RectF timeBox =
-                        new RectF(
-                                left,
-                                bottom + 3f,
-                                left + boxWidth,
-                                bottom + 29f
-                        );
-
-                canvas.drawRect(
-                        timeBox,
-                        paint
+        RectF timeBox =
+                new RectF(
+                        left,
+                        bottom + 3f,
+                        left + boxWidth,
+                        bottom + 29f
                 );
 
-                paint.setColor(Color.WHITE);
+        canvas.drawRect(
+                timeBox,
+                paint
+        );
 
-                paint.setTextSize(13f);
+        paint.setColor(Color.WHITE);
 
-                paint.setTextAlign(
-                        Paint.Align.CENTER
-                );
+        paint.setTextSize(13f);
 
-                canvas.drawText(
-                        time,
-                        left + boxWidth / 2f,
-                        bottom + 21f,
-                        paint
-                );
+        paint.setTextAlign(
+                Paint.Align.CENTER
+        );
 
-                paint.setTextAlign(
-                        Paint.Align.LEFT
-                );
-            }
-        }
+        canvas.drawText(
+                time,
+                left + boxWidth / 2f,
+                bottom + 21f,
+                paint
+        );
+
+        paint.setTextAlign(
+                Paint.Align.LEFT
+        );
+    }
+
+    private void drawCandleInfo(
+            Canvas canvas,
+            Candle candle
+    ) {
+
+        float infoLeft =
+                CHART_LEFT + 8f;
+
+        float infoTop =
+                CHART_TOP + 8f;
+
+        float infoWidth =
+                178f;
+
+        float infoHeight =
+                108f;
+
+        paint.setColor(
+                Color.rgb(18, 27, 40)
+        );
+
+        paint.setStyle(
+                Paint.Style.FILL
+        );
+
+        canvas.drawRoundRect(
+                new RectF(
+                        infoLeft,
+                        infoTop,
+                        infoLeft + infoWidth,
+                        infoTop + infoHeight
+                ),
+                8f,
+                8f,
+                paint
+        );
+
+        paint.setColor(
+                Color.rgb(80, 95, 115)
+        );
+
+        paint.setStyle(
+                Paint.Style.STROKE
+        );
+
+        paint.setStrokeWidth(1f);
+
+        canvas.drawRoundRect(
+                new RectF(
+                        infoLeft,
+                        infoTop,
+                        infoLeft + infoWidth,
+                        infoTop + infoHeight
+                ),
+                8f,
+                8f,
+                paint
+        );
+
+        paint.setStyle(
+                Paint.Style.FILL
+        );
+
+        paint.setTextSize(13f);
+
+        paint.setColor(TEXT);
+
+        canvas.drawText(
+                "CANDLE",
+                infoLeft + 10f,
+                infoTop + 19f,
+                paint
+        );
+
+        paint.setTextSize(12f);
+
+        paint.setColor(Color.WHITE);
+
+        canvas.drawText(
+                "O  " + formatPrice(
+                        candle.getOpen()
+                ),
+                infoLeft + 10f,
+                infoTop + 39f,
+                paint
+        );
+
+        canvas.drawText(
+                "H  " + formatPrice(
+                        candle.getHigh()
+                ),
+                infoLeft + 10f,
+                infoTop + 57f,
+                paint
+        );
+
+        canvas.drawText(
+                "L  " + formatPrice(
+                        candle.getLow()
+                ),
+                infoLeft + 10f,
+                infoTop + 75f,
+                paint
+        );
+
+        canvas.drawText(
+                "C  " + formatPrice(
+                        candle.getClose()
+                ),
+                infoLeft + 10f,
+                infoTop + 93f,
+                paint
+        );
     }
 
     private double getPriceFromCrosshair() {
@@ -1788,6 +1989,10 @@ public class ForexChartView extends View {
             float oldSlot =
                     candleWidth + spacing;
 
+            if (oldSlot <= 0) {
+                return true;
+            }
+
             int oldStart =
                     calculateStartIndex();
 
@@ -1910,6 +2115,11 @@ public class ForexChartView extends View {
                 crosshairY =
                         event.getY();
 
+                selectedCandleIndex =
+                        getCandleIndexFromX(
+                                crosshairX
+                        );
+
                 invalidate();
 
                 return true;
@@ -1919,6 +2129,8 @@ public class ForexChartView extends View {
                 setParentScrollEnabled(false);
 
                 showCrosshair = false;
+
+                selectedCandleIndex = -1;
 
                 invalidate();
 
@@ -1934,6 +2146,8 @@ public class ForexChartView extends View {
                 ) {
 
                     showCrosshair = false;
+
+                    selectedCandleIndex = -1;
 
                     invalidate();
 
@@ -1963,13 +2177,6 @@ public class ForexChartView extends View {
 
                     if (slot > 0) {
 
-                        /*
-                         * Dragging LEFT moves backward
-                         * through candle history.
-                         *
-                         * Dragging RIGHT returns toward
-                         * the latest candles.
-                         */
                         scrollOffset -=
                                 dx / slot;
 
@@ -1984,6 +2191,11 @@ public class ForexChartView extends View {
 
                 crosshairX =
                         event.getX();
+
+                selectedCandleIndex =
+                        getCandleIndexFromX(
+                                crosshairX
+                        );
 
                 lastX =
                         event.getX();
