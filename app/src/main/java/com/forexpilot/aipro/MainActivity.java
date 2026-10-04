@@ -681,16 +681,6 @@ public class MainActivity extends Activity {
         forexChartView =
                 new ForexChartView(this);
 
-        /*
-         * Responsive chart height.
-         *
-         * Portrait  = 480dp
-         * Landscape = 320dp
-         *
-         * This replaces the old fixed 900px height so the
-         * dashboard does not become unnecessarily tall when
-         * the phone is rotated.
-         */
         int chartHeightDp;
 
         if (getResources().getConfiguration().orientation
@@ -1557,6 +1547,57 @@ public class MainActivity extends Activity {
                         new SignalRepository.SignalCallback() {
 
                             @Override
+                            public void onCandles(
+                                    String symbol,
+                                    String timeframe,
+                                    List<Candle> candles
+                            ) {
+
+                                runOnUiThread(
+                                        () -> {
+
+                                            if (forexChartView == null) {
+                                                return;
+                                            }
+
+                                            if (!selectedMarket.equals(
+                                                    symbol
+                                            )) {
+                                                return;
+                                            }
+
+                                            if (!selectedTimeframe.equals(
+                                                    timeframe
+                                            )) {
+                                                return;
+                                            }
+
+                                            if (candles == null
+                                                    || candles.isEmpty()) {
+                                                return;
+                                            }
+
+                                            /*
+                                             * These are the exact candles
+                                             * that SignalEngine uses.
+                                             *
+                                             * This keeps the chart and the
+                                             * real ForexPilot signal data
+                                             * synchronized.
+                                             */
+                                            forexChartView.setCandles(
+                                                    candles
+                                            );
+
+                                            updateIndicatorDashboard(
+                                                    symbol,
+                                                    candles
+                                            );
+                                        }
+                                );
+                            }
+
+                            @Override
                             public void onSignal(
                                     Signal signal
                             ) {
@@ -2088,6 +2129,10 @@ public class MainActivity extends Activity {
 
         clearTradeLevels();
 
+        if (forexChartView != null) {
+            forexChartView.clearTradeLevels();
+        }
+
         priceText.setText(
                 "PRICE  --"
         );
@@ -2383,6 +2428,16 @@ public class MainActivity extends Activity {
                             : RED
             );
 
+            /*
+             * Send the real confirmed ForexPilot signal
+             * to the dashboard and chart trade levels.
+             */
+            if (forexChartView != null) {
+                forexChartView.setTradeLevels(
+                        pendingPrimarySignal
+                );
+            }
+
             updateDashboard(
                     pendingPrimarySignal
             );
@@ -2431,6 +2486,10 @@ public class MainActivity extends Activity {
         }
 
         clearTradeLevels();
+
+        if (forexChartView != null) {
+            forexChartView.clearTradeLevels();
+        }
 
         if (mtfConfluenceText != null) {
 
@@ -2863,6 +2922,12 @@ public class MainActivity extends Activity {
                     )
             );
 
+            if (forexChartView != null) {
+                forexChartView.setTradeLevels(
+                        signal
+                );
+            }
+
         } else {
 
             clearTradeLevels();
@@ -2899,6 +2964,10 @@ public class MainActivity extends Activity {
             tp3Text.setText(
                     "TAKE PROFIT 3          --"
             );
+        }
+
+        if (forexChartView != null) {
+            forexChartView.clearTradeLevels();
         }
     }
 
