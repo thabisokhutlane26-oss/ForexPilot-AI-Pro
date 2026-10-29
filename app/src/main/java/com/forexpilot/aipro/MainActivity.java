@@ -14,6 +14,7 @@ import android.view.View;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
+import android.widget.FrameLayout;
 import android.widget.HorizontalScrollView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
@@ -31,15 +32,7 @@ import java.util.TimeZone;
 public class MainActivity extends Activity {
 
     private ForexChartView forexChartView;
-    private RsiChartView rsiChartView;
-    private ChartDrawingView chartDrawingView;
-    private TradeLevelView tradeLevelView;
-    private SignalBadgeView signalBadgeView;
-    private MultiTimeframeView multiTimeframeView;
 
-    private BackgroundScanner backgroundScanner;
-    private SignalAlertCoordinator signalAlertCoordinator;
-    private SignalNotificationManager signalNotificationManager;
     private SignalRepository signalRepository;
     private MarketDataProvider marketDataProvider;
 
@@ -56,6 +49,12 @@ public class MainActivity extends Activity {
     private Spinner marketSpinner, timeframeSpinner;
     private Button scanButton, chartStyleButton, themeButton;
 
+    private FrameLayout pageContainer;
+    private View[] appPages;
+    private Button[] navigationButtons;
+
+    private int currentPage = 0;
+
     private String selectedMarket = "EUR/USD";
     private String selectedTimeframe = "15M";
 
@@ -63,7 +62,6 @@ public class MainActivity extends Activity {
     private boolean lightMode = false;
     private boolean lastForexOpen = false;
     private boolean mtfScanning = false;
-    private boolean rebuildingDashboard = false;
 
     private Signal pendingPrimarySignal;
 
@@ -78,6 +76,10 @@ public class MainActivity extends Activity {
 
     private final String[] timeframes = {
             "5M", "15M", "30M", "1H", "4H", "1D"
+    };
+
+    private final String[] pageNames = {
+            "HOME", "CHARTS", "ANALYSIS", "TRADE PLAN", "SETTINGS"
     };
 
     private int BACKGROUND, CARD, CARD_BORDER;
@@ -114,11 +116,11 @@ public class MainActivity extends Activity {
     private void applyThemeColors() {
         GREEN = Color.rgb(20, 190, 100);
         RED = Color.rgb(230, 65, 75);
-        YELLOW = Color.rgb(225, 155, 20);
+        YELLOW = Color.rgb(225, 175, 45);
         BLUE = Color.rgb(45, 120, 230);
 
         if (lightMode) {
-            BACKGROUND = Color.rgb(240, 244, 249);
+            BACKGROUND = Color.rgb(239, 243, 249);
             CARD = Color.WHITE;
             CARD_BORDER = Color.rgb(215, 224, 235);
             WHITE = Color.rgb(25, 35, 50);
@@ -145,11 +147,7 @@ public class MainActivity extends Activity {
                 .apply();
 
         applyThemeColors();
-
-        rebuildingDashboard = true;
         buildDashboard();
-        rebuildingDashboard = false;
-
         updateTimeAndSessions();
 
         if (marketDataProvider != null) {
@@ -162,146 +160,130 @@ public class MainActivity extends Activity {
     }
 
     private void buildDashboard() {
-        ScrollView scrollView = new ScrollView(this);
-        scrollView.setFillViewport(true);
-        scrollView.setBackgroundColor(BACKGROUND);
-
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(dp(18), dp(20), dp(18), dp(32));
-        scrollView.addView(root);
+        root.setBackgroundColor(BACKGROUND);
 
-        // HEADER
+        // PROFESSIONAL HEADER
         LinearLayout header = new LinearLayout(this);
         header.setOrientation(LinearLayout.VERTICAL);
-        header.setGravity(Gravity.CENTER);
+        header.setPadding(dp(18), dp(12), dp(18), dp(12));
+        header.setBackgroundColor(CARD);
 
-        TextView title = createText("FOREXPILOT", 30, WHITE, true);
-        title.setGravity(Gravity.CENTER);
+        TextView title = createText("FOREXPILOT AI PRO", 23, WHITE, true);
         header.addView(title);
 
-        TextView subtitle = createText(
-                "AI PRO  •  SIGNAL INTELLIGENCE", 12, BLUE, true);
-        subtitle.setGravity(Gravity.CENTER);
-        header.addView(subtitle, params(5));
+        header.addView(createText(
+                "TRADING INTELLIGENCE  •  SAST", 11, BLUE, true),
+                params(3));
 
-        connectionStatus = createText("● CONNECTING", 12, YELLOW, true);
-        connectionStatus.setGravity(Gravity.CENTER);
-        header.addView(connectionStatus, params(12));
+        connectionStatus = createText(
+                "● CONNECTING TO MARKET", 11, YELLOW, true);
+        header.addView(connectionStatus, params(6));
         root.addView(header);
 
-        // THEME BUTTON
-        themeButton = createButton(
-                lightMode ? "SWITCH TO DARK MODE  ☾"
-                        : "SWITCH TO LIGHT MODE  ☼");
+        // PAGE CONTAINER
+        pageContainer = new FrameLayout(this);
+        LinearLayout.LayoutParams contentParams =
+                new LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f);
+        root.addView(pageContainer, contentParams);
 
-        themeButton.setOnClickListener(v -> toggleTheme());
-        root.addView(themeButton, params(12));
+        appPages = new View[5];
+        navigationButtons = new Button[5];
 
-        // MARKET CLOCK
+        LinearLayout home = createPage(0);
+        LinearLayout charts = createPage(1);
+        LinearLayout analysis = createPage(2);
+        LinearLayout trade = createPage(3);
+        LinearLayout settings = createPage(4);
+
+        // HOME PAGE
         LinearLayout clockCard = createCard();
-        clockCard.addView(createSmallLabel("MARKET CLOCK"));
+        clockCard.addView(createSmallLabel("SOUTH AFRICAN MARKET CLOCK"));
 
-        clockText = createText("--:--:-- SAST", 28, WHITE, true);
-        clockText.setGravity(Gravity.CENTER);
-        clockCard.addView(clockText, params(8));
+        clockText = createText("--:--:-- SAST", 27, WHITE, true);
+        clockCard.addView(clockText, params(6));
 
-        dateText = createText("LOADING DATE", 12, MUTED, true);
-        dateText.setGravity(Gravity.CENTER);
-        clockCard.addView(dateText, params(4));
+        dateText = createText("--", 12, MUTED, false);
+        clockCard.addView(dateText, params(3));
 
         forexStatusText = createText(
-                "● CHECKING FOREX MARKET", 16, YELLOW, true);
-        forexStatusText.setGravity(Gravity.CENTER);
-        clockCard.addView(forexStatusText, params(12));
+                "● CHECKING MARKET", 14, YELLOW, true);
+        clockCard.addView(forexStatusText, params(8));
 
         nextMarketText = createText(
-                "CHECKING MARKET HOURS...", 11, MUTED, false);
-        nextMarketText.setGravity(Gravity.CENTER);
-        clockCard.addView(nextMarketText, params(5));
-        root.addView(clockCard, params(14));
+                "Checking market status...", 11, MUTED, false);
+        clockCard.addView(nextMarketText, params(4));
+        home.addView(clockCard, params(8));
 
-        // FOREX SESSIONS
-        LinearLayout sessionsCard = createCard();
-        sessionsCard.addView(createSmallLabel("FOREX SESSIONS • SAST"));
-        sessionsCard.addView(createText(
-                "Global session monitor", 11, MUTED, false), params(4));
-
-        sydneySessionText = createSessionRow("SYDNEY");
-        tokyoSessionText = createSessionRow("TOKYO");
-        londonSessionText = createSessionRow("LONDON");
-        newYorkSessionText = createSessionRow("NEW YORK");
-
-        sessionsCard.addView(sydneySessionText, params(9));
-        sessionsCard.addView(tokyoSessionText, params(6));
-        sessionsCard.addView(londonSessionText, params(6));
-        sessionsCard.addView(newYorkSessionText, params(6));
-        root.addView(sessionsCard, params(14));
-
-        // MARKET SELECTORS
         LinearLayout selectorCard = createCard();
         selectorCard.addView(createSmallLabel("CURRENCY PAIR"));
 
         marketSpinner = createSpinner(markets);
         marketSpinner.setSelection(indexOf(markets, selectedMarket));
-        selectorCard.addView(marketSpinner, params(6));
+        selectorCard.addView(marketSpinner, params(5));
 
-        selectorCard.addView(createSmallLabel("TIMEFRAME"), params(12));
+        selectorCard.addView(createSmallLabel("TIMEFRAME"), params(8));
         timeframeSpinner = createSpinner(timeframes);
         timeframeSpinner.setSelection(indexOf(timeframes, selectedTimeframe));
-        selectorCard.addView(timeframeSpinner, params(6));
-        root.addView(selectorCard, params(14));
+        selectorCard.addView(timeframeSpinner, params(5));
+        home.addView(selectorCard, params(8));
 
-        // LIVE PRICE
         LinearLayout priceCard = createCard();
-        priceCard.addView(createSmallLabel("LIVE MARKET"));
+        priceCard.addView(createSmallLabel("SELECTED MARKET"));
 
-        marketName = createText(selectedMarket, 24, WHITE, true);
+        marketName = createText(selectedMarket, 25, WHITE, true);
         marketName.setGravity(Gravity.CENTER);
-        priceCard.addView(marketName, params(8));
+        priceCard.addView(marketName, params(5));
 
         priceText = createText("PRICE  --", 20, BLUE, true);
         priceText.setGravity(Gravity.CENTER);
         priceCard.addView(priceText, params(5));
-        root.addView(priceCard, params(14));
+        home.addView(priceCard, params(8));
 
-        // SIGNAL
         LinearLayout signalCard = createCard();
         signalCard.addView(createSmallLabel("AI SIGNAL"));
 
         signalText = createText("WAIT", 38, YELLOW, true);
         signalText.setGravity(Gravity.CENTER);
-        signalCard.addView(signalText, params(8));
+        signalCard.addView(signalText, params(5));
 
         TextView signalDescription = createText(
-                "Technical analysis • Multi-timeframe confirmation",
+                "BUY / SELL signals require confirmation",
                 12, MUTED, false);
         signalDescription.setGravity(Gravity.CENTER);
-        signalCard.addView(signalDescription, params(3));
-        root.addView(signalCard, params(14));
+        signalCard.addView(signalDescription, params(4));
+        home.addView(signalCard, params(8));
 
-        // INDICATORS
-        LinearLayout indicatorsCard = createCard();
-        indicatorsCard.addView(createSmallLabel("MARKET ANALYSIS"));
+        scanButton = createButton("SCAN MARKET");
+        scanButton.setTextSize(15);
+        scanButton.setOnClickListener(v -> requestCurrentSignal());
+        home.addView(scanButton, params(8));
 
-        LinearLayout row1 = createMetricRow();
-        trendText = createMetric("TREND", "--");
-        rsiText = createMetric("RSI", "--");
-        row1.addView(trendText, weightParams());
-        row1.addView(rsiText, weightParams());
-        indicatorsCard.addView(row1, params(10));
+        LinearLayout quickCard = createCard();
+        quickCard.addView(createSmallLabel("QUICK ACCESS"));
 
-        LinearLayout row2 = createMetricRow();
-        atrText = createMetric("ATR", "--");
-        momentumText = createMetric("TIMEFRAME", selectedTimeframe);
-        row2.addView(atrText, weightParams());
-        row2.addView(momentumText, weightParams());
-        indicatorsCard.addView(row2, params(8));
-        root.addView(indicatorsCard, params(14));
+        Button openChart = createButton("OPEN CHARTS");
+        openChart.setOnClickListener(v -> showPage(1));
+        quickCard.addView(openChart, params(7));
 
-        // PRICE CHART
+        Button openAnalysis = createButton("VIEW ANALYSIS");
+        openAnalysis.setOnClickListener(v -> showPage(2));
+        quickCard.addView(openAnalysis, params(7));
+
+        Button openTrade = createButton("VIEW TRADE PLAN");
+        openTrade.setOnClickListener(v -> showPage(3));
+        quickCard.addView(openTrade, params(7));
+
+        home.addView(quickCard, params(8));
+
+        // CHARTS PAGE
         LinearLayout chartCard = createCard();
-        chartCard.addView(createText("PRICE CHART", 16, WHITE, true));
+        chartCard.addView(createText("PRICE CHART", 19, WHITE, true));
+        chartCard.addView(createText(
+                "Candlestick and line chart", 12, MUTED, false),
+                params(3));
 
         chartStyleButton = createButton("");
         updateChartStyleButtonText();
@@ -311,37 +293,53 @@ public class MainActivity extends Activity {
         forexChartView = new ForexChartView(this);
         forexChartView.setLineChartMode(lineChartMode);
 
-        int chartHeightDp =
+        int chartHeight =
                 getResources().getConfiguration().orientation
-                        == Configuration.ORIENTATION_LANDSCAPE ? 320 : 480;
+                        == Configuration.ORIENTATION_LANDSCAPE ? 300 : 420;
 
         chartCard.addView(forexChartView,
                 new LinearLayout.LayoutParams(
                         LinearLayout.LayoutParams.MATCH_PARENT,
-                        dp(chartHeightDp)));
+                        dp(chartHeight)));
 
-        root.addView(chartCard, params(14));
+        charts.addView(chartCard, params(8));
 
-        // TRADE PLAN
-        LinearLayout tradeCard = createCard();
-        tradeCard.addView(createSmallLabel("TRADE PLAN"));
+        LinearLayout chartInfo = createCard();
+        chartInfo.addView(createSmallLabel("CURRENT CHART"));
+        chartInfo.addView(createText(
+                "PAIR: " + selectedMarket
+                        + "\nTIMEFRAME: " + selectedTimeframe
+                        + "\n\nChoose the pair and timeframe on Home. "
+                        + "Use the chart-style button to switch views.",
+                13, MUTED, false), params(6));
+        charts.addView(chartInfo, params(8));
 
-        entryText = createTradeRow("ENTRY", BLUE);
-        stopLossText = createTradeRow("STOP LOSS", RED);
-        tp1Text = createTradeRow("TAKE PROFIT 1", GREEN);
-        tp2Text = createTradeRow("TAKE PROFIT 2", GREEN);
-        tp3Text = createTradeRow("TAKE PROFIT 3", GREEN);
+        // ANALYSIS PAGE
+        LinearLayout indicatorCard = createCard();
+        indicatorCard.addView(createText(
+                "TECHNICAL ANALYSIS", 19, WHITE, true));
+        indicatorCard.addView(createText(
+                "Indicators from available market candles",
+                12, MUTED, false), params(3));
 
-        tradeCard.addView(entryText, params(10));
-        tradeCard.addView(stopLossText, params(5));
-        tradeCard.addView(tp1Text, params(5));
-        tradeCard.addView(tp2Text, params(5));
-        tradeCard.addView(tp3Text, params(5));
-        root.addView(tradeCard, params(14));
+        LinearLayout row1 = createMetricRow();
+        trendText = createMetric("TREND", "--");
+        rsiText = createMetric("RSI", "--");
+        row1.addView(trendText, weightParams());
+        row1.addView(rsiText, weightParams());
+        indicatorCard.addView(row1, params(8));
 
-        // MULTI-TIMEFRAME CONFIRMATION
+        LinearLayout row2 = createMetricRow();
+        atrText = createMetric("ATR", "--");
+        momentumText = createMetric("TIMEFRAME", selectedTimeframe);
+        row2.addView(atrText, weightParams());
+        row2.addView(momentumText, weightParams());
+        indicatorCard.addView(row2, params(8));
+        analysis.addView(indicatorCard, params(8));
+
         LinearLayout mtfCard = createCard();
-        mtfCard.addView(createSmallLabel("MULTI-TIMEFRAME CONFIRMATION"));
+        mtfCard.addView(createText(
+                "MULTI-TIMEFRAME CONFIRMATION", 16, WHITE, true));
 
         HorizontalScrollView horizontal = new HorizontalScrollView(this);
         horizontal.setHorizontalScrollBarEnabled(false);
@@ -364,63 +362,211 @@ public class MainActivity extends Activity {
         timeframeRow.addView(mtf1dText);
 
         horizontal.addView(timeframeRow);
-        mtfCard.addView(horizontal, params(10));
+        mtfCard.addView(horizontal, params(8));
 
         mtfConfluenceText = createText(
                 "MTF CONFLUENCE • WAIT", 13, YELLOW, true);
-        mtfConfluenceText.setGravity(Gravity.CENTER);
-        mtfCard.addView(mtfConfluenceText, params(12));
-        root.addView(mtfCard, params(14));
+        mtfCard.addView(mtfConfluenceText, params(10));
+        analysis.addView(mtfCard, params(8));
 
-        // SCAN BUTTON
-        scanButton = createButton("SCAN MARKET");
-        scanButton.setTextSize(16);
-        scanButton.setPadding(dp(16), dp(14), dp(16), dp(14));
-        scanButton.setOnClickListener(v -> requestCurrentSignal());
-        root.addView(scanButton, params(16));
+        // TRADE PLAN PAGE
+        LinearLayout tradeCard = createCard();
+        tradeCard.addView(createText("TRADE PLAN", 21, WHITE, true));
+        tradeCard.addView(createText(
+                "Trade levels appear after signal confirmation.",
+                12, MUTED, false), params(4));
 
-        TextView footer = createText(
-                "FOREXPILOT AI PRO\nLIVE DATA • MTF ANALYSIS • SIGNALS\n"
-                        + "Signals are informational, not financial advice.",
-                10, MUTED, false);
-        footer.setGravity(Gravity.CENTER);
-        root.addView(footer, params(18));
+        entryText = createTradeRow("ENTRY", BLUE);
+        stopLossText = createTradeRow("STOP LOSS", RED);
+        tp1Text = createTradeRow("TAKE PROFIT 1", GREEN);
+        tp2Text = createTradeRow("TAKE PROFIT 2", GREEN);
+        tp3Text = createTradeRow("TAKE PROFIT 3", GREEN);
+
+        tradeCard.addView(entryText, params(10));
+        tradeCard.addView(stopLossText, params(6));
+        tradeCard.addView(tp1Text, params(6));
+        tradeCard.addView(tp2Text, params(6));
+        tradeCard.addView(tp3Text, params(6));
+
+        Button tradeScan = createButton("SCAN FOR A TRADE");
+        tradeScan.setOnClickListener(v -> requestCurrentSignal());
+        tradeCard.addView(tradeScan, params(12));
+
+        trade.addView(tradeCard, params(8));
+
+        // SETTINGS PAGE
+        LinearLayout appearanceCard = createCard();
+        appearanceCard.addView(createText(
+                "APPEARANCE", 18, WHITE, true));
+        appearanceCard.addView(createText(
+                "Change the app colour theme.",
+                12, MUTED, false), params(4));
+
+        themeButton = createButton("");
+        updateThemeButtonText();
+        themeButton.setOnClickListener(v -> toggleTheme());
+        appearanceCard.addView(themeButton, params(8));
+        settings.addView(appearanceCard, params(8));
+
+        LinearLayout settingsCard = createCard();
+        settingsCard.addView(createText(
+                "MARKET SETTINGS", 18, WHITE, true));
+        settingsCard.addView(createText(
+                "Default market: " + selectedMarket
+                        + "\nSelected timeframe: " + selectedTimeframe
+                        + "\n\nData provider: Twelve Data"
+                        + "\n\nMarket data availability depends on your "
+                        + "configured provider and API access.",
+                13, MUTED, false), params(8));
+        settings.addView(settingsCard, params(8));
+
+        LinearLayout sessionsCard = createCard();
+        sessionsCard.addView(createText(
+                "FOREX SESSIONS • SAST", 17, WHITE, true));
+
+        sydneySessionText = createSessionRow("SYDNEY");
+        tokyoSessionText = createSessionRow("TOKYO");
+        londonSessionText = createSessionRow("LONDON");
+        newYorkSessionText = createSessionRow("NEW YORK");
+
+        sessionsCard.addView(sydneySessionText, params(8));
+        sessionsCard.addView(tokyoSessionText, params(6));
+        sessionsCard.addView(londonSessionText, params(6));
+        sessionsCard.addView(newYorkSessionText, params(6));
+        settings.addView(sessionsCard, params(8));
+
+        LinearLayout aboutCard = createCard();
+        aboutCard.addView(createText(
+                "ABOUT FOREXPILOT AI PRO", 16, WHITE, true));
+        aboutCard.addView(createText(
+                "Market scanner • Technical indicators"
+                        + "\nMulti-timeframe confirmation"
+                        + "\nTrade planning tools"
+                        + "\n\nSignals are informational and are not "
+                        + "financial advice.",
+                13, MUTED, false), params(6));
+        settings.addView(aboutCard, params(8));
+
+        // FIXED BOTTOM NAVIGATION
+        LinearLayout nav = new LinearLayout(this);
+        nav.setOrientation(LinearLayout.HORIZONTAL);
+        nav.setPadding(dp(3), dp(5), dp(3), dp(5));
+        nav.setBackgroundColor(CARD);
+
+        String[] labels = {
+                "⌂\nHOME",
+                "▥\nCHARTS",
+                "◈\nANALYSIS",
+                "⇄\nTRADE",
+                "⚙\nSETTINGS"
+        };
+
+        for (int i = 0; i < labels.length; i++) {
+            final int page = i;
+            Button button = new Button(this);
+            navigationButtons[i] = button;
+            button.setText(labels[i]);
+            button.setTextSize(9);
+            button.setAllCaps(false);
+            button.setMinWidth(0);
+            button.setMinimumWidth(0);
+            button.setPadding(dp(1), dp(2), dp(1), dp(2));
+            button.setTextColor(WHITE);
+            button.setOnClickListener(v -> showPage(page));
+
+            LinearLayout.LayoutParams navParams =
+                    new LinearLayout.LayoutParams(0, dp(57), 1f);
+            navParams.setMargins(dp(2), 0, dp(2), 0);
+            nav.addView(button, navParams);
+        }
+
+        root.addView(nav);
+        setContentView(root);
 
         marketSpinner.setOnItemSelectedListener(
                 new AdapterView.OnItemSelectedListener() {
-                    @Override
-                    public void onItemSelected(AdapterView<?> parent,
-                                               View view, int position, long id) {
-                        String newMarket = markets[position];
-                        if (newMarket.equals(selectedMarket)) return;
+            @Override
+            public void onItemSelected(AdapterView<?> parent,
+                                       View view, int position, long id) {
+                String value = markets[position];
+                if (value.equals(selectedMarket)) return;
 
-                        selectedMarket = newMarket;
-                        marketName.setText(selectedMarket);
-                        resetForNewSelection();
-                    }
+                selectedMarket = value;
+                marketName.setText(value);
+                resetForNewSelection();
+            }
 
-                    @Override
-                    public void onNothingSelected(AdapterView<?> parent) { }
-                });
+            @Override
+            public void onNothingSelected(AdapterView<?> parent) { }
+        });
 
         timeframeSpinner.setOnItemSelectedListener(
                 new AdapterView.OnItemSelectedListener() {
-                    @Override
-                    public void onItemSelected(AdapterView<?> parent,
-                                               View view, int position, long id) {
-                        String newTimeframe = timeframes[position];
-                        if (newTimeframe.equals(selectedTimeframe)) return;
+            @Override
+            public void onItemSelected(AdapterView<?> parent,
+                                       View view, int position, long id) {
+                String value = timeframes[position];
+                if (value.equals(selectedTimeframe)) return;
 
-                        selectedTimeframe = newTimeframe;
-                        momentumText.setText("TIMEFRAME\n" + selectedTimeframe);
-                        resetForNewSelection();
-                    }
+                selectedTimeframe = value;
+                momentumText.setText("TIMEFRAME\n" + value);
+                resetForNewSelection();
+            }
 
-                    @Override
-                    public void onNothingSelected(AdapterView<?> parent) { }
-                });
+            @Override
+            public void onNothingSelected(AdapterView<?> parent) { }
+        });
 
-        setContentView(scrollView);
+        showPage(currentPage);
+    }
+
+    private LinearLayout createPage(int index) {
+        ScrollView scroll = new ScrollView(this);
+        scroll.setFillViewport(true);
+        scroll.setBackgroundColor(BACKGROUND);
+
+        LinearLayout body = new LinearLayout(this);
+        body.setOrientation(LinearLayout.VERTICAL);
+        body.setPadding(dp(12), dp(8), dp(12), dp(16));
+        scroll.addView(body);
+
+        appPages[index] = scroll;
+
+        FrameLayout.LayoutParams pageParams =
+                new FrameLayout.LayoutParams(
+                        FrameLayout.LayoutParams.MATCH_PARENT,
+                        FrameLayout.LayoutParams.MATCH_PARENT);
+
+        pageContainer.addView(scroll, pageParams);
+        return body;
+    }
+
+    private void showPage(int index) {
+        if (appPages == null || navigationButtons == null) return;
+
+        currentPage = Math.max(0, Math.min(index, appPages.length - 1));
+
+        for (int i = 0; i < appPages.length; i++) {
+            appPages[i].setVisibility(
+                    i == currentPage ? View.VISIBLE : View.GONE);
+
+            GradientDrawable background = new GradientDrawable();
+            background.setCornerRadius(dp(10));
+            background.setColor(
+                    i == currentPage ? BUTTON_BACKGROUND : CARD);
+
+            navigationButtons[i].setBackground(background);
+            navigationButtons[i].setTextColor(
+                    i == currentPage ? Color.WHITE : MUTED);
+        }
+    }
+
+    private void updateThemeButtonText() {
+        if (themeButton != null) {
+            themeButton.setText(lightMode
+                    ? "SWITCH TO DARK MODE  ☾"
+                    : "SWITCH TO LIGHT MODE  ☼");
+        }
     }
 
     private int indexOf(String[] values, String target) {
@@ -448,8 +594,8 @@ public class MainActivity extends Activity {
     private void updateChartStyleButtonText() {
         if (chartStyleButton != null) {
             chartStyleButton.setText(lineChartMode
-                    ? "CHART STYLE: LINE  •  SWITCH TO CANDLES"
-                    : "CHART STYLE: CANDLES  •  SWITCH TO LINE");
+                    ? "LINE CHART  •  SWITCH TO CANDLESTICKS"
+                    : "CANDLESTICKS  •  SWITCH TO LINE");
         }
     }
 
@@ -488,12 +634,11 @@ public class MainActivity extends Activity {
             forexChartView.setLineChartMode(lineChartMode);
         }
 
-        if (rsiChartView != null) rsiChartView.clearRsi();
-        if (tradeLevelView != null) tradeLevelView.clearSignal();
-        if (signalBadgeView != null) signalBadgeView.clearSignal();
-        if (multiTimeframeView != null) multiTimeframeView.clearResults();
-
         requestChartCandles();
+
+        if (signalRepository != null && isForexMarketOpen(new Date())) {
+            requestCurrentSignal();
+        }
     }
 
     private void updateTimeAndSessions() {
@@ -512,7 +657,8 @@ public class MainActivity extends Activity {
         }
 
         if (dateText != null) {
-            dateText.setText(dateFormat.format(now).toUpperCase(Locale.ENGLISH));
+            dateText.setText(
+                    dateFormat.format(now).toUpperCase(Locale.ENGLISH));
         }
 
         boolean open = isForexMarketOpen(now);
@@ -527,8 +673,8 @@ public class MainActivity extends Activity {
         if (nextMarketText != null) {
             if (open) {
                 nextMarketText.setText(mtfScanning
-                        ? "SIGNAL SCANNER • MTF ANALYSIS"
-                        : "SIGNAL SCANNER • ACTIVE");
+                        ? "SCANNER • MULTI-TIMEFRAME ANALYSIS"
+                        : "SCANNER • ACTIVE");
                 nextMarketText.setTextColor(GREEN);
             } else {
                 nextMarketText.setText(
@@ -548,10 +694,14 @@ public class MainActivity extends Activity {
 
         lastForexOpen = open;
 
-        updateSession(sydneySessionText, "SYDNEY", "Australia/Sydney", 8, 17);
-        updateSession(tokyoSessionText, "TOKYO", "Asia/Tokyo", 9, 18);
-        updateSession(londonSessionText, "LONDON", "Europe/London", 8, 17);
-        updateSession(newYorkSessionText, "NEW YORK", "America/New_York", 8, 17);
+        updateSession(sydneySessionText, "SYDNEY",
+                "Australia/Sydney", 8, 17);
+        updateSession(tokyoSessionText, "TOKYO",
+                "Asia/Tokyo", 9, 18);
+        updateSession(londonSessionText, "LONDON",
+                "Europe/London", 8, 17);
+        updateSession(newYorkSessionText, "NEW YORK",
+                "America/New_York", 8, 17);
     }
 
     private boolean isForexMarketOpen(Date date) {
@@ -575,26 +725,34 @@ public class MainActivity extends Activity {
 
         Calendar local = Calendar.getInstance(
                 TimeZone.getTimeZone(zone), Locale.ENGLISH);
-        Date now = new Date();
-        local.setTime(now);
+        local.setTime(new Date());
 
         int day = local.get(Calendar.DAY_OF_WEEK);
         int minutes = local.get(Calendar.HOUR_OF_DAY) * 60
                 + local.get(Calendar.MINUTE);
 
-        boolean weekend = day == Calendar.SATURDAY || day == Calendar.SUNDAY;
-        boolean open = !weekend && minutes >= openHour * 60
+        boolean weekend = day == Calendar.SATURDAY
+                || day == Calendar.SUNDAY;
+
+        boolean open = !weekend
+                && minutes >= openHour * 60
                 && minutes < closeHour * 60;
 
-        SimpleDateFormat format = new SimpleDateFormat("HH:mm", Locale.ENGLISH);
+        SimpleDateFormat format =
+                new SimpleDateFormat("HH:mm", Locale.ENGLISH);
+
         format.setTimeZone(TimeZone.getTimeZone(zone));
-        String localTime = format.format(now);
+        String localTime = format.format(new Date());
 
-        format.setTimeZone(TimeZone.getTimeZone("Africa/Johannesburg"));
-        String sastTime = format.format(now);
+        format.setTimeZone(
+                TimeZone.getTimeZone("Africa/Johannesburg"));
+        String sastTime = format.format(new Date());
 
-        view.setText("●  " + name + "     " + (open ? "OPEN" : "CLOSED")
-                + "\n    Local " + localTime + "     •     SAST " + sastTime);
+        view.setText("●  " + name + "     "
+                + (open ? "OPEN" : "CLOSED")
+                + "\n    Local " + localTime
+                + "     •     SAST " + sastTime);
+
         view.setTextColor(open ? GREEN : MUTED);
     }
 
@@ -610,11 +768,13 @@ public class MainActivity extends Activity {
 
         if (connectionStatus != null) {
             connectionStatus.setText(
-                    "● MARKET CLOSED • HISTORICAL DATA LOADED");
+                    "● MARKET CLOSED • HISTORICAL DATA");
             connectionStatus.setTextColor(MUTED);
         }
 
-        if (trendText != null) trendText.setText("TREND\nHISTORICAL");
+        if (trendText != null) {
+            trendText.setText("TREND\nHISTORICAL");
+        }
 
         clearTradeLevels();
         resetMtfDisplay();
@@ -634,7 +794,9 @@ public class MainActivity extends Activity {
                     if (forexChartView == null
                             || !selectedMarket.equals(symbol)
                             || !selectedTimeframe.equals(timeframe)
-                            || candles == null || candles.isEmpty()) return;
+                            || candles == null || candles.isEmpty()) {
+                        return;
+                    }
 
                     forexChartView.setCandles(candles);
                     forexChartView.setLineChartMode(lineChartMode);
@@ -684,7 +846,8 @@ public class MainActivity extends Activity {
                     }
 
                     if (mtfConfluenceText != null) {
-                        mtfConfluenceText.setText("MTF CONFLUENCE • DATA ERROR");
+                        mtfConfluenceText.setText(
+                                "MTF CONFLUENCE • DATA ERROR");
                         mtfConfluenceText.setTextColor(RED);
                     }
 
@@ -721,7 +884,9 @@ public class MainActivity extends Activity {
             public void onCandlesReceived(List<Candle> candles) {
                 runOnUiThread(() -> {
                     if (!market.equals(selectedMarket)
-                            || !timeframe.equals(selectedTimeframe)) return;
+                            || !timeframe.equals(selectedTimeframe)) {
+                        return;
+                    }
 
                     if (candles == null || candles.isEmpty()) {
                         connectionStatus.setText("● CHART DATA EMPTY");
@@ -734,7 +899,9 @@ public class MainActivity extends Activity {
                     updateIndicatorDashboard(market, candles);
 
                     Candle latest = candles.get(candles.size() - 1);
-                    if (latest != null && Double.isFinite(latest.getClose())) {
+
+                    if (latest != null
+                            && Double.isFinite(latest.getClose())) {
                         priceText.setText("PRICE  "
                                 + formatPrice(market, latest.getClose()));
                     }
@@ -742,9 +909,10 @@ public class MainActivity extends Activity {
                     boolean open = isForexMarketOpen(new Date());
 
                     connectionStatus.setText((open
-                            ? "● LIVE CHART • " : "● HISTORICAL CHART • ")
-                            + market + " • " + timeframe + " • "
-                            + candles.size() + " CANDLES");
+                            ? "● LIVE CHART • "
+                            : "● HISTORICAL CHART • ")
+                            + market + " • " + timeframe
+                            + " • " + candles.size() + " CANDLES");
 
                     connectionStatus.setTextColor(open ? GREEN : MUTED);
                 });
@@ -753,8 +921,10 @@ public class MainActivity extends Activity {
             @Override
             public void onPriceReceived(double price) {
                 runOnUiThread(() -> {
-                    if (market.equals(selectedMarket) && Double.isFinite(price)) {
-                        priceText.setText("PRICE  " + formatPrice(market, price));
+                    if (market.equals(selectedMarket)
+                            && Double.isFinite(price)) {
+                        priceText.setText(
+                                "PRICE  " + formatPrice(market, price));
                     }
                 });
             }
@@ -768,14 +938,16 @@ public class MainActivity extends Activity {
                     connectionStatus.setTextColor(RED);
 
                     nextMarketText.setText("CHART ERROR • "
-                            + (message == null ? "UNKNOWN ERROR" : message));
+                            + (message == null
+                            ? "UNKNOWN ERROR" : message));
                     nextMarketText.setTextColor(RED);
                 });
             }
         });
     }
 
-    private void updateIndicatorDashboard(String market, List<Candle> candles) {
+    private void updateIndicatorDashboard(
+            String market, List<Candle> candles) {
         if (candles == null || candles.isEmpty()) return;
 
         String trend = IndicatorEngine.trend(candles, 20, 50);
@@ -784,9 +956,13 @@ public class MainActivity extends Activity {
         double momentum = IndicatorEngine.momentum(candles, 5);
 
         if (trendText != null) {
-            trendText.setText("TREND\n" + (trend == null ? "--" : trend));
-            trendText.setTextColor("BULLISH".equalsIgnoreCase(trend) ? GREEN
-                    : "BEARISH".equalsIgnoreCase(trend) ? RED : WHITE);
+            trendText.setText(
+                    "TREND\n" + (trend == null ? "--" : trend));
+
+            trendText.setTextColor(
+                    "BULLISH".equalsIgnoreCase(trend) ? GREEN
+                            : "BEARISH".equalsIgnoreCase(trend) ? RED
+                            : WHITE);
         }
 
         if (rsiText != null) {
@@ -795,13 +971,15 @@ public class MainActivity extends Activity {
                     : "RSI\n--");
 
             if (Double.isFinite(rsi)) {
-                rsiText.setTextColor(rsi >= 70 ? RED : rsi <= 30 ? GREEN : WHITE);
+                rsiText.setTextColor(
+                        rsi >= 70 ? RED : rsi <= 30 ? GREEN : WHITE);
             }
         }
 
         if (atrText != null) {
             atrText.setText("ATR\n"
-                    + (Double.isFinite(atr) ? formatPrice(market, atr) : "--"));
+                    + (Double.isFinite(atr)
+                    ? formatPrice(market, atr) : "--"));
         }
 
         if (momentumText != null) {
@@ -908,7 +1086,8 @@ public class MainActivity extends Activity {
             public void onPriceReceived(double price) {
                 runOnUiThread(() -> {
                     if (Double.isFinite(price)) {
-                        priceText.setText("PRICE  " + formatPrice(market, price));
+                        priceText.setText(
+                                "PRICE  " + formatPrice(market, price));
                     }
                 });
             }
@@ -918,11 +1097,14 @@ public class MainActivity extends Activity {
                 runOnUiThread(() -> {
                     if (!mtfScanning) return;
 
-                    mtfResults.add(new MultiTimeframeEngine.TimeframeResult(
-                            timeframe, Signal.Direction.WAIT,
-                            "DATA ERROR", Double.NaN, Double.NaN));
+                    mtfResults.add(
+                            new MultiTimeframeEngine.TimeframeResult(
+                                    timeframe, Signal.Direction.WAIT,
+                                    "DATA ERROR", Double.NaN, Double.NaN));
 
-                    updateMtfBox(timeframe, mtfResults.get(mtfResults.size() - 1));
+                    updateMtfBox(timeframe,
+                            mtfResults.get(mtfResults.size() - 1));
+
                     mtfRequestIndex++;
 
                     if (mtfRequestIndex < timeframes.length) {
@@ -970,7 +1152,8 @@ public class MainActivity extends Activity {
 
             mtfConfluenceText.setTextColor(color);
             connectionStatus.setText("● MTF CONFIRMED • "
-                    + mtf.name() + " • STRENGTH " + confluence.getStrength());
+                    + mtf.name() + " • STRENGTH "
+                    + confluence.getStrength());
             connectionStatus.setTextColor(color);
 
             if (forexChartView != null) {
@@ -1003,7 +1186,8 @@ public class MainActivity extends Activity {
         }
 
         if (mtfConfluenceText != null) {
-            mtfConfluenceText.setText("MTF CONFLUENCE • WAIT • " + reason);
+            mtfConfluenceText.setText(
+                    "MTF CONFLUENCE • WAIT • " + reason);
             mtfConfluenceText.setTextColor(YELLOW);
         }
     }
@@ -1022,10 +1206,12 @@ public class MainActivity extends Activity {
         }
     }
 
-    private void updateMtfBox(String timeframe,
-                              MultiTimeframeEngine.TimeframeResult result) {
+    private void updateMtfBox(
+            String timeframe,
+            MultiTimeframeEngine.TimeframeResult result) {
         if (result != null) {
-            setMtfBox(getMtfTextView(timeframe), timeframe, result.getDirection());
+            setMtfBox(getMtfTextView(timeframe),
+                    timeframe, result.getDirection());
         }
     }
 
@@ -1052,7 +1238,9 @@ public class MainActivity extends Activity {
     private void updatePrimaryDashboard(Signal signal) {
         if (signal == null
                 || !selectedMarket.equals(signal.getSymbol())
-                || !selectedTimeframe.equals(signal.getTimeframe())) return;
+                || !selectedTimeframe.equals(signal.getTimeframe())) {
+            return;
+        }
 
         if (!Double.isNaN(signal.getEntry())) {
             priceText.setText("PRICE  "
@@ -1062,10 +1250,12 @@ public class MainActivity extends Activity {
         trendText.setText("TREND\n" + signal.getTrend());
 
         rsiText.setText(Double.isNaN(signal.getRsi()) ? "RSI\n--"
-                : "RSI\n" + String.format(Locale.US, "%.2f", signal.getRsi()));
+                : "RSI\n" + String.format(
+                        Locale.US, "%.2f", signal.getRsi()));
 
         atrText.setText(Double.isNaN(signal.getAtr()) ? "ATR\n--"
-                : "ATR\n" + formatPrice(signal.getSymbol(), signal.getAtr()));
+                : "ATR\n" + formatPrice(
+                        signal.getSymbol(), signal.getAtr()));
 
         momentumText.setText("TIMEFRAME\n" + signal.getTimeframe());
     }
@@ -1079,7 +1269,9 @@ public class MainActivity extends Activity {
         }
 
         if (!selectedMarket.equals(signal.getSymbol())
-                || !selectedTimeframe.equals(signal.getTimeframe())) return;
+                || !selectedTimeframe.equals(signal.getTimeframe())) {
+            return;
+        }
 
         marketName.setText(signal.getSymbol());
 
@@ -1088,25 +1280,28 @@ public class MainActivity extends Activity {
 
         connectionStatus.setTextColor(
                 signal.getDirection() == Signal.Direction.BUY ? GREEN
-                        : signal.getDirection() == Signal.Direction.SELL ? RED
-                        : YELLOW);
+                        : signal.getDirection() == Signal.Direction.SELL
+                        ? RED : YELLOW);
 
         priceText.setText(Double.isNaN(signal.getEntry()) ? "PRICE  --"
-                : "PRICE  " + formatPrice(signal.getSymbol(), signal.getEntry()));
+                : "PRICE  " + formatPrice(
+                        signal.getSymbol(), signal.getEntry()));
 
         signalText.setText(signal.getDirection().name());
         signalText.setTextColor(
                 signal.getDirection() == Signal.Direction.BUY ? GREEN
-                        : signal.getDirection() == Signal.Direction.SELL ? RED
-                        : YELLOW);
+                        : signal.getDirection() == Signal.Direction.SELL
+                        ? RED : YELLOW);
 
         trendText.setText("TREND\n" + signal.getTrend());
 
         rsiText.setText(Double.isNaN(signal.getRsi()) ? "RSI\n--"
-                : "RSI\n" + String.format(Locale.US, "%.2f", signal.getRsi()));
+                : "RSI\n" + String.format(
+                        Locale.US, "%.2f", signal.getRsi()));
 
         atrText.setText(Double.isNaN(signal.getAtr()) ? "ATR\n--"
-                : "ATR\n" + formatPrice(signal.getSymbol(), signal.getAtr()));
+                : "ATR\n" + formatPrice(
+                        signal.getSymbol(), signal.getAtr()));
 
         momentumText.setText("TIMEFRAME\n" + signal.getTimeframe());
 
@@ -1120,13 +1315,16 @@ public class MainActivity extends Activity {
                     + formatPrice(signal.getSymbol(), signal.getStopLoss()));
 
             tp1Text.setText("TAKE PROFIT 1          "
-                    + formatPrice(signal.getSymbol(), signal.getTakeProfit1()));
+                    + formatPrice(signal.getSymbol(),
+                    signal.getTakeProfit1()));
 
             tp2Text.setText("TAKE PROFIT 2          "
-                    + formatPrice(signal.getSymbol(), signal.getTakeProfit2()));
+                    + formatPrice(signal.getSymbol(),
+                    signal.getTakeProfit2()));
 
             tp3Text.setText("TAKE PROFIT 3          "
-                    + formatPrice(signal.getSymbol(), signal.getTakeProfit3()));
+                    + formatPrice(signal.getSymbol(),
+                    signal.getTakeProfit3()));
 
             if (forexChartView != null) {
                 forexChartView.setTradeLevels(signal);
@@ -1163,10 +1361,12 @@ public class MainActivity extends Activity {
     }
 
     private int dp(float value) {
-        return (int) (value * getResources().getDisplayMetrics().density + 0.5f);
+        return (int) (value
+                * getResources().getDisplayMetrics().density + 0.5f);
     }
 
-    private TextView createText(String text, float size, int color, boolean bold) {
+    private TextView createText(
+            String text, float size, int color, boolean bold) {
         TextView view = new TextView(this);
         view.setText(text);
         view.setTextSize(size);
@@ -1186,14 +1386,15 @@ public class MainActivity extends Activity {
     private Button createButton(String text) {
         Button button = new Button(this);
         button.setText(text);
-        button.setTextSize(13);
+        button.setTextSize(12);
         button.setTextColor(Color.WHITE);
         button.setAllCaps(false);
         button.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        button.setMinHeight(dp(46));
 
         GradientDrawable background = new GradientDrawable();
         background.setColor(BUTTON_BACKGROUND);
-        background.setCornerRadius(dp(14));
+        background.setCornerRadius(dp(12));
         button.setBackground(background);
 
         return button;
@@ -1201,11 +1402,11 @@ public class MainActivity extends Activity {
 
     private TextView createSessionRow(String name) {
         TextView view = createText(
-                "● " + name + "     CHECKING...", 13, MUTED, true);
+                "● " + name + "     CHECKING...", 12, MUTED, true);
 
-        view.setPadding(dp(14), dp(13), dp(14), dp(13));
-        view.setBackground(createRoundedBackground(FIELD_BACKGROUND,
-                CARD_BORDER, 12));
+        view.setPadding(dp(12), dp(12), dp(12), dp(12));
+        view.setBackground(createRoundedBackground(
+                FIELD_BACKGROUND, CARD_BORDER, 12));
 
         return view;
     }
@@ -1224,9 +1425,11 @@ public class MainActivity extends Activity {
     }
 
     private TextView createMetric(String label, String value) {
-        TextView view = createText(label + "\n" + value, 14, WHITE, true);
+        TextView view = createText(
+                label + "\n" + value, 14, WHITE, true);
+
         view.setGravity(Gravity.CENTER);
-        view.setPadding(dp(12), dp(15), dp(12), dp(15));
+        view.setPadding(dp(10), dp(15), dp(10), dp(15));
         view.setBackground(createRoundedBackground(
                 FIELD_BACKGROUND, CARD_BORDER, 14));
 
@@ -1234,11 +1437,12 @@ public class MainActivity extends Activity {
     }
 
     private TextView createTradeRow(String label, int color) {
-        TextView view = createText(label + "                         --",
-                14, color, true);
+        TextView view = createText(
+                label + "                         --", 13, color, true);
 
-        view.setPadding(dp(14), dp(14), dp(14), dp(14));
-        view.setBackground(createRoundedBackground(FIELD_BACKGROUND, 0, 12));
+        view.setPadding(dp(12), dp(14), dp(8), dp(14));
+        view.setBackground(createRoundedBackground(
+                FIELD_BACKGROUND, CARD_BORDER, 10));
 
         return view;
     }
@@ -1246,15 +1450,16 @@ public class MainActivity extends Activity {
     private TextView createTimeframeBox(String text) {
         TextView view = createText(text, 12, WHITE, true);
         view.setGravity(Gravity.CENTER);
-        view.setPadding(dp(20), dp(14), dp(20), dp(14));
+        view.setPadding(dp(16), dp(14), dp(16), dp(14));
         view.setBackground(createRoundedBackground(
-                FIELD_BACKGROUND, CARD_BORDER, 14));
+                FIELD_BACKGROUND, CARD_BORDER, 12));
 
-        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT);
+        LinearLayout.LayoutParams p =
+                new LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.WRAP_CONTENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT);
 
-        p.setMargins(0, 0, dp(8), 0);
+        p.setMargins(0, 0, dp(7), 0);
         view.setLayoutParams(p);
 
         return view;
@@ -1269,9 +1474,9 @@ public class MainActivity extends Activity {
     private LinearLayout createCard() {
         LinearLayout card = new LinearLayout(this);
         card.setOrientation(LinearLayout.VERTICAL);
-        card.setPadding(dp(18), dp(18), dp(18), dp(18));
-        card.setBackground(createRoundedBackground(CARD, CARD_BORDER, 18));
-
+        card.setPadding(dp(14), dp(14), dp(14), dp(14));
+        card.setBackground(createRoundedBackground(
+                CARD, CARD_BORDER, 16));
         return card;
     }
 
@@ -1289,17 +1494,19 @@ public class MainActivity extends Activity {
     }
 
     private LinearLayout.LayoutParams params(int topMargin) {
-        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT);
+        LinearLayout.LayoutParams p =
+                new LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT);
 
         p.topMargin = dp(topMargin);
         return p;
     }
 
     private LinearLayout.LayoutParams weightParams() {
-        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(
-                0, LinearLayout.LayoutParams.WRAP_CONTENT, 1);
+        LinearLayout.LayoutParams p =
+                new LinearLayout.LayoutParams(
+                        0, LinearLayout.LayoutParams.WRAP_CONTENT, 1);
 
         p.setMargins(dp(4), 0, dp(4), 0);
         return p;
