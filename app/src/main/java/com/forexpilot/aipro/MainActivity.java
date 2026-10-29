@@ -2,6 +2,7 @@
 package com.forexpilot.aipro;
 
 import android.app.Activity;
+import android.content.SharedPreferences;
 import android.content.res.Configuration;
 import android.graphics.Color;
 import android.graphics.Typeface;
@@ -21,11 +22,11 @@ import android.widget.TextView;
 
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Calendar;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
 import java.util.TimeZone;
-import java.util.Calendar;
 
 public class MainActivity extends Activity {
 
@@ -53,37 +54,38 @@ public class MainActivity extends Activity {
     private TextView mtf1hText, mtf4hText, mtf1dText, mtfConfluenceText;
 
     private Spinner marketSpinner, timeframeSpinner;
-    private Button scanButton, chartStyleButton;
+    private Button scanButton, chartStyleButton, themeButton;
 
     private String selectedMarket = "EUR/USD";
     private String selectedTimeframe = "15M";
+
     private boolean lineChartMode = false;
+    private boolean lightMode = false;
     private boolean lastForexOpen = false;
     private boolean mtfScanning = false;
+    private boolean rebuildingDashboard = false;
+
     private Signal pendingPrimarySignal;
 
     private final List<MultiTimeframeEngine.TimeframeResult> mtfResults =
             new ArrayList<>();
+
     private int mtfRequestIndex = 0;
 
     private final String[] markets = {
             "XAU/USD", "EUR/USD", "GBP/USD", "USD/JPY", "NZD/USD"
     };
+
     private final String[] timeframes = {
             "5M", "15M", "30M", "1H", "4H", "1D"
     };
 
-    private final int BACKGROUND = Color.rgb(7, 11, 18);
-    private final int CARD = Color.rgb(15, 22, 33);
-    private final int CARD_BORDER = Color.rgb(35, 47, 64);
-    private final int WHITE = Color.rgb(245, 248, 252);
-    private final int MUTED = Color.rgb(145, 158, 175);
-    private final int GREEN = Color.rgb(40, 220, 125);
-    private final int RED = Color.rgb(255, 80, 90);
-    private final int YELLOW = Color.rgb(255, 195, 70);
-    private final int BLUE = Color.rgb(70, 150, 255);
+    private int BACKGROUND, CARD, CARD_BORDER;
+    private int WHITE, MUTED, GREEN, RED, YELLOW, BLUE;
+    private int FIELD_BACKGROUND, BUTTON_BACKGROUND;
 
     private final Handler clockHandler = new Handler();
+
     private final Runnable clockRunnable = new Runnable() {
         @Override
         public void run() {
@@ -95,21 +97,81 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
+        SharedPreferences preferences =
+                getSharedPreferences("forexpilot_preferences", MODE_PRIVATE);
+
+        lightMode = preferences.getBoolean("light_mode", false);
+        lineChartMode = preferences.getBoolean("line_chart_mode", false);
+
+        applyThemeColors();
         buildDashboard();
         updateTimeAndSessions();
         clockHandler.post(clockRunnable);
         connectToMarketData();
     }
 
+    private void applyThemeColors() {
+        GREEN = Color.rgb(20, 190, 100);
+        RED = Color.rgb(230, 65, 75);
+        YELLOW = Color.rgb(225, 155, 20);
+        BLUE = Color.rgb(45, 120, 230);
+
+        if (lightMode) {
+            BACKGROUND = Color.rgb(240, 244, 249);
+            CARD = Color.WHITE;
+            CARD_BORDER = Color.rgb(215, 224, 235);
+            WHITE = Color.rgb(25, 35, 50);
+            MUTED = Color.rgb(100, 115, 135);
+            FIELD_BACKGROUND = Color.rgb(246, 248, 252);
+            BUTTON_BACKGROUND = Color.rgb(35, 100, 210);
+        } else {
+            BACKGROUND = Color.rgb(7, 11, 18);
+            CARD = Color.rgb(15, 22, 33);
+            CARD_BORDER = Color.rgb(35, 47, 64);
+            WHITE = Color.rgb(245, 248, 252);
+            MUTED = Color.rgb(145, 158, 175);
+            FIELD_BACKGROUND = Color.rgb(10, 16, 25);
+            BUTTON_BACKGROUND = Color.rgb(25, 95, 180);
+        }
+    }
+
+    private void toggleTheme() {
+        lightMode = !lightMode;
+
+        getSharedPreferences("forexpilot_preferences", MODE_PRIVATE)
+                .edit()
+                .putBoolean("light_mode", lightMode)
+                .apply();
+
+        applyThemeColors();
+
+        rebuildingDashboard = true;
+        buildDashboard();
+        rebuildingDashboard = false;
+
+        updateTimeAndSessions();
+
+        if (marketDataProvider != null) {
+            requestChartCandles();
+        }
+
+        if (signalRepository != null && isForexMarketOpen(new Date())) {
+            requestCurrentSignal();
+        }
+    }
+
     private void buildDashboard() {
         ScrollView scrollView = new ScrollView(this);
+        scrollView.setFillViewport(true);
         scrollView.setBackgroundColor(BACKGROUND);
 
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(18, 24, 18, 32);
+        root.setPadding(dp(18), dp(20), dp(18), dp(32));
         scrollView.addView(root);
 
+        // HEADER
         LinearLayout header = new LinearLayout(this);
         header.setOrientation(LinearLayout.VERTICAL);
         header.setGravity(Gravity.CENTER);
@@ -118,38 +180,48 @@ public class MainActivity extends Activity {
         title.setGravity(Gravity.CENTER);
         header.addView(title);
 
-        TextView pro = createText(
+        TextView subtitle = createText(
                 "AI PRO  •  SIGNAL INTELLIGENCE", 12, BLUE, true);
-        pro.setGravity(Gravity.CENTER);
-        header.addView(pro, params(6));
+        subtitle.setGravity(Gravity.CENTER);
+        header.addView(subtitle, params(5));
 
-        connectionStatus = createText("●  CONNECTING", 13, YELLOW, true);
+        connectionStatus = createText("● CONNECTING", 12, YELLOW, true);
         connectionStatus.setGravity(Gravity.CENTER);
-        header.addView(connectionStatus, params(14));
+        header.addView(connectionStatus, params(12));
         root.addView(header);
 
-        LinearLayout marketClockCard = createCard();
-        marketClockCard.addView(createSmallLabel("MARKET CLOCK"));
+        // THEME BUTTON
+        themeButton = createButton(
+                lightMode ? "SWITCH TO DARK MODE  ☾"
+                        : "SWITCH TO LIGHT MODE  ☼");
+
+        themeButton.setOnClickListener(v -> toggleTheme());
+        root.addView(themeButton, params(12));
+
+        // MARKET CLOCK
+        LinearLayout clockCard = createCard();
+        clockCard.addView(createSmallLabel("MARKET CLOCK"));
 
         clockText = createText("--:--:-- SAST", 28, WHITE, true);
         clockText.setGravity(Gravity.CENTER);
-        marketClockCard.addView(clockText, params(8));
+        clockCard.addView(clockText, params(8));
 
         dateText = createText("LOADING DATE", 12, MUTED, true);
         dateText.setGravity(Gravity.CENTER);
-        marketClockCard.addView(dateText, params(4));
+        clockCard.addView(dateText, params(4));
 
         forexStatusText = createText(
-                "●  CHECKING FOREX MARKET", 17, YELLOW, true);
+                "● CHECKING FOREX MARKET", 16, YELLOW, true);
         forexStatusText.setGravity(Gravity.CENTER);
-        marketClockCard.addView(forexStatusText, params(14));
+        clockCard.addView(forexStatusText, params(12));
 
         nextMarketText = createText(
                 "CHECKING MARKET HOURS...", 11, MUTED, false);
         nextMarketText.setGravity(Gravity.CENTER);
-        marketClockCard.addView(nextMarketText, params(5));
-        root.addView(marketClockCard, params(18));
+        clockCard.addView(nextMarketText, params(5));
+        root.addView(clockCard, params(14));
 
+        // FOREX SESSIONS
         LinearLayout sessionsCard = createCard();
         sessionsCard.addView(createSmallLabel("FOREX SESSIONS • SAST"));
         sessionsCard.addView(createText(
@@ -160,25 +232,27 @@ public class MainActivity extends Activity {
         londonSessionText = createSessionRow("LONDON");
         newYorkSessionText = createSessionRow("NEW YORK");
 
-        sessionsCard.addView(sydneySessionText, params(10));
+        sessionsCard.addView(sydneySessionText, params(9));
         sessionsCard.addView(tokyoSessionText, params(6));
         sessionsCard.addView(londonSessionText, params(6));
         sessionsCard.addView(newYorkSessionText, params(6));
         root.addView(sessionsCard, params(14));
 
-        LinearLayout marketSelector = createCard();
-        marketSelector.addView(createSmallLabel("MARKET"));
+        // MARKET SELECTORS
+        LinearLayout selectorCard = createCard();
+        selectorCard.addView(createSmallLabel("CURRENCY PAIR"));
 
         marketSpinner = createSpinner(markets);
-        marketSpinner.setSelection(1);
-        marketSelector.addView(marketSpinner, params(6));
+        marketSpinner.setSelection(indexOf(markets, selectedMarket));
+        selectorCard.addView(marketSpinner, params(6));
 
-        marketSelector.addView(createSmallLabel("TIMEFRAME"), params(14));
+        selectorCard.addView(createSmallLabel("TIMEFRAME"), params(12));
         timeframeSpinner = createSpinner(timeframes);
-        timeframeSpinner.setSelection(1);
-        marketSelector.addView(timeframeSpinner, params(6));
-        root.addView(marketSelector, params(14));
+        timeframeSpinner.setSelection(indexOf(timeframes, selectedTimeframe));
+        selectorCard.addView(timeframeSpinner, params(6));
+        root.addView(selectorCard, params(14));
 
+        // LIVE PRICE
         LinearLayout priceCard = createCard();
         priceCard.addView(createSmallLabel("LIVE MARKET"));
 
@@ -186,11 +260,12 @@ public class MainActivity extends Activity {
         marketName.setGravity(Gravity.CENTER);
         priceCard.addView(marketName, params(8));
 
-        priceText = createText("PRICE  --", 19, BLUE, true);
+        priceText = createText("PRICE  --", 20, BLUE, true);
         priceText.setGravity(Gravity.CENTER);
         priceCard.addView(priceText, params(5));
         root.addView(priceCard, params(14));
 
+        // SIGNAL
         LinearLayout signalCard = createCard();
         signalCard.addView(createSmallLabel("AI SIGNAL"));
 
@@ -199,12 +274,13 @@ public class MainActivity extends Activity {
         signalCard.addView(signalText, params(8));
 
         TextView signalDescription = createText(
-                "Technical market analysis • MTF confirmation required",
+                "Technical analysis • Multi-timeframe confirmation",
                 12, MUTED, false);
         signalDescription.setGravity(Gravity.CENTER);
         signalCard.addView(signalDescription, params(3));
         root.addView(signalCard, params(14));
 
+        // INDICATORS
         LinearLayout indicatorsCard = createCard();
         indicatorsCard.addView(createSmallLabel("MARKET ANALYSIS"));
 
@@ -225,21 +301,11 @@ public class MainActivity extends Activity {
 
         // PRICE CHART
         LinearLayout chartCard = createCard();
-        TextView chartTitle = createText("PRICE CHART", 16, WHITE, true);
-        chartTitle.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
-        chartCard.addView(chartTitle);
+        chartCard.addView(createText("PRICE CHART", 16, WHITE, true));
 
-        chartStyleButton = new Button(this);
+        chartStyleButton = createButton("");
         updateChartStyleButtonText();
-        chartStyleButton.setTextSize(13);
-        chartStyleButton.setTextColor(WHITE);
-        chartStyleButton.setAllCaps(false);
         chartStyleButton.setOnClickListener(v -> toggleChartStyle());
-
-        GradientDrawable chartButtonBackground = new GradientDrawable();
-        chartButtonBackground.setColor(Color.rgb(25, 95, 180));
-        chartButtonBackground.setCornerRadius(12);
-        chartStyleButton.setBackground(chartButtonBackground);
         chartCard.addView(chartStyleButton, params(8));
 
         forexChartView = new ForexChartView(this);
@@ -248,13 +314,12 @@ public class MainActivity extends Activity {
         int chartHeightDp =
                 getResources().getConfiguration().orientation
                         == Configuration.ORIENTATION_LANDSCAPE ? 320 : 480;
-        float density = getResources().getDisplayMetrics().density;
-        int chartHeightPx = (int) (chartHeightDp * density + 0.5f);
 
         chartCard.addView(forexChartView,
                 new LinearLayout.LayoutParams(
                         LinearLayout.LayoutParams.MATCH_PARENT,
-                        chartHeightPx));
+                        dp(chartHeightDp)));
+
         root.addView(chartCard, params(14));
 
         // TRADE PLAN
@@ -297,6 +362,7 @@ public class MainActivity extends Activity {
         timeframeRow.addView(mtf1hText);
         timeframeRow.addView(mtf4hText);
         timeframeRow.addView(mtf1dText);
+
         horizontal.addView(timeframeRow);
         mtfCard.addView(horizontal, params(10));
 
@@ -306,23 +372,16 @@ public class MainActivity extends Activity {
         mtfCard.addView(mtfConfluenceText, params(12));
         root.addView(mtfCard, params(14));
 
-        scanButton = new Button(this);
-        scanButton.setText("SCAN MARKET");
-        scanButton.setTextSize(15);
-        scanButton.setTextColor(WHITE);
-        scanButton.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
-        scanButton.setAllCaps(false);
-        scanButton.setPadding(20, 15, 20, 15);
-
-        GradientDrawable buttonBackground = new GradientDrawable();
-        buttonBackground.setColor(Color.rgb(25, 95, 180));
-        buttonBackground.setCornerRadius(18);
-        scanButton.setBackground(buttonBackground);
+        // SCAN BUTTON
+        scanButton = createButton("SCAN MARKET");
+        scanButton.setTextSize(16);
+        scanButton.setPadding(dp(16), dp(14), dp(16), dp(14));
         scanButton.setOnClickListener(v -> requestCurrentSignal());
-        root.addView(scanButton, params(18));
+        root.addView(scanButton, params(16));
 
         TextView footer = createText(
-                "FOREXPILOT AI PRO\nLIVE DATA • MTF ANALYSIS • REAL-TIME SIGNALS",
+                "FOREXPILOT AI PRO\nLIVE DATA • MTF ANALYSIS • SIGNALS\n"
+                        + "Signals are informational, not financial advice.",
                 10, MUTED, false);
         footer.setGravity(Gravity.CENTER);
         root.addView(footer, params(18));
@@ -332,10 +391,11 @@ public class MainActivity extends Activity {
                     @Override
                     public void onItemSelected(AdapterView<?> parent,
                                                View view, int position, long id) {
-                        selectedMarket = markets[position];
-                        if (marketName != null) {
-                            marketName.setText(selectedMarket);
-                        }
+                        String newMarket = markets[position];
+                        if (newMarket.equals(selectedMarket)) return;
+
+                        selectedMarket = newMarket;
+                        marketName.setText(selectedMarket);
                         resetForNewSelection();
                     }
 
@@ -348,10 +408,11 @@ public class MainActivity extends Activity {
                     @Override
                     public void onItemSelected(AdapterView<?> parent,
                                                View view, int position, long id) {
-                        selectedTimeframe = timeframes[position];
-                        if (momentumText != null) {
-                            momentumText.setText("TIMEFRAME\n" + selectedTimeframe);
-                        }
+                        String newTimeframe = timeframes[position];
+                        if (newTimeframe.equals(selectedTimeframe)) return;
+
+                        selectedTimeframe = newTimeframe;
+                        momentumText.setText("TIMEFRAME\n" + selectedTimeframe);
                         resetForNewSelection();
                     }
 
@@ -362,21 +423,33 @@ public class MainActivity extends Activity {
         setContentView(scrollView);
     }
 
-    // Chart mode toggle
+    private int indexOf(String[] values, String target) {
+        for (int i = 0; i < values.length; i++) {
+            if (values[i].equals(target)) return i;
+        }
+        return 0;
+    }
+
     private void toggleChartStyle() {
         lineChartMode = !lineChartMode;
+
+        getSharedPreferences("forexpilot_preferences", MODE_PRIVATE)
+                .edit()
+                .putBoolean("line_chart_mode", lineChartMode)
+                .apply();
+
         if (forexChartView != null) {
             forexChartView.setLineChartMode(lineChartMode);
         }
+
         updateChartStyleButtonText();
     }
 
     private void updateChartStyleButtonText() {
         if (chartStyleButton != null) {
-            chartStyleButton.setText(
-                    lineChartMode
-                            ? "CHART STYLE: LINE  •  SWITCH TO CANDLES"
-                            : "CHART STYLE: CANDLES  •  SWITCH TO LINE");
+            chartStyleButton.setText(lineChartMode
+                    ? "CHART STYLE: LINE  •  SWITCH TO CANDLES"
+                    : "CHART STYLE: CANDLES  •  SWITCH TO LINE");
         }
     }
 
@@ -393,23 +466,28 @@ public class MainActivity extends Activity {
             signalText.setText("WAIT");
             signalText.setTextColor(YELLOW);
         }
+
         if (priceText != null) priceText.setText("PRICE  --");
         if (trendText != null) trendText.setText("TREND\n--");
         if (rsiText != null) rsiText.setText("RSI\n--");
         if (atrText != null) atrText.setText("ATR\n--");
+
         if (momentumText != null) {
             momentumText.setText("TIMEFRAME\n" + selectedTimeframe);
         }
+
         if (connectionStatus != null) {
-            connectionStatus.setText("●  LOADING HISTORICAL DATA • "
+            connectionStatus.setText("● LOADING • "
                     + selectedMarket + " • " + selectedTimeframe);
             connectionStatus.setTextColor(YELLOW);
         }
+
         if (forexChartView != null) {
             forexChartView.clearChart();
             forexChartView.clearTradeLevels();
             forexChartView.setLineChartMode(lineChartMode);
         }
+
         if (rsiChartView != null) rsiChartView.clearRsi();
         if (tradeLevelView != null) tradeLevelView.clearSignal();
         if (signalBadgeView != null) signalBadgeView.clearSignal();
@@ -419,7 +497,7 @@ public class MainActivity extends Activity {
     }
 
     private void updateTimeAndSessions() {
-        Calendar now = Calendar.getInstance();
+        Date now = new Date();
 
         SimpleDateFormat timeFormat =
                 new SimpleDateFormat("HH:mm:ss", Locale.ENGLISH);
@@ -430,24 +508,24 @@ public class MainActivity extends Activity {
         dateFormat.setTimeZone(TimeZone.getTimeZone("Africa/Johannesburg"));
 
         if (clockText != null) {
-            clockText.setText(timeFormat.format(now.getTime()) + " SAST");
-        }
-        if (dateText != null) {
-            dateText.setText(dateFormat.format(now.getTime())
-                    .toUpperCase(Locale.ENGLISH));
+            clockText.setText(timeFormat.format(now) + " SAST");
         }
 
-        boolean forexOpen = isForexMarketOpen(now.getTime());
+        if (dateText != null) {
+            dateText.setText(dateFormat.format(now).toUpperCase(Locale.ENGLISH));
+        }
+
+        boolean open = isForexMarketOpen(now);
 
         if (forexStatusText != null) {
-            forexStatusText.setText(forexOpen
-                    ? "●  FOREX MARKET OPEN"
-                    : "●  FOREX MARKET CLOSED");
-            forexStatusText.setTextColor(forexOpen ? GREEN : RED);
+            forexStatusText.setText(open
+                    ? "● FOREX MARKET OPEN"
+                    : "● FOREX MARKET CLOSED");
+            forexStatusText.setTextColor(open ? GREEN : RED);
         }
 
         if (nextMarketText != null) {
-            if (forexOpen) {
+            if (open) {
                 nextMarketText.setText(mtfScanning
                         ? "SIGNAL SCANNER • MTF ANALYSIS"
                         : "SIGNAL SCANNER • ACTIVE");
@@ -460,23 +538,64 @@ public class MainActivity extends Activity {
         }
 
         if (scanButton != null) {
-            scanButton.setEnabled(forexOpen && !mtfScanning);
-            scanButton.setAlpha(forexOpen ? 1.0f : 0.45f);
+            scanButton.setEnabled(open && !mtfScanning);
+            scanButton.setAlpha(open ? 1f : 0.45f);
         }
 
-        if (forexOpen && !lastForexOpen && signalRepository != null) {
+        if (open && !lastForexOpen && signalRepository != null) {
             requestCurrentSignal();
         }
-        lastForexOpen = forexOpen;
 
-        updateSession(sydneySessionText, "SYDNEY",
-                "Australia/Sydney", 8, 17);
-        updateSession(tokyoSessionText, "TOKYO",
-                "Asia/Tokyo", 9, 18);
-        updateSession(londonSessionText, "LONDON",
-                "Europe/London", 8, 17);
-        updateSession(newYorkSessionText, "NEW YORK",
-                "America/New_York", 8, 17);
+        lastForexOpen = open;
+
+        updateSession(sydneySessionText, "SYDNEY", "Australia/Sydney", 8, 17);
+        updateSession(tokyoSessionText, "TOKYO", "Asia/Tokyo", 9, 18);
+        updateSession(londonSessionText, "LONDON", "Europe/London", 8, 17);
+        updateSession(newYorkSessionText, "NEW YORK", "America/New_York", 8, 17);
+    }
+
+    private boolean isForexMarketOpen(Date date) {
+        Calendar ny = Calendar.getInstance(
+                TimeZone.getTimeZone("America/New_York"), Locale.ENGLISH);
+        ny.setTime(date);
+
+        int day = ny.get(Calendar.DAY_OF_WEEK);
+        int minutes = ny.get(Calendar.HOUR_OF_DAY) * 60
+                + ny.get(Calendar.MINUTE);
+
+        if (day == Calendar.SATURDAY) return false;
+        if (day == Calendar.SUNDAY) return minutes >= 17 * 60;
+        if (day == Calendar.FRIDAY) return minutes < 17 * 60;
+        return true;
+    }
+
+    private void updateSession(TextView view, String name, String zone,
+                               int openHour, int closeHour) {
+        if (view == null) return;
+
+        Calendar local = Calendar.getInstance(
+                TimeZone.getTimeZone(zone), Locale.ENGLISH);
+        Date now = new Date();
+        local.setTime(now);
+
+        int day = local.get(Calendar.DAY_OF_WEEK);
+        int minutes = local.get(Calendar.HOUR_OF_DAY) * 60
+                + local.get(Calendar.MINUTE);
+
+        boolean weekend = day == Calendar.SATURDAY || day == Calendar.SUNDAY;
+        boolean open = !weekend && minutes >= openHour * 60
+                && minutes < closeHour * 60;
+
+        SimpleDateFormat format = new SimpleDateFormat("HH:mm", Locale.ENGLISH);
+        format.setTimeZone(TimeZone.getTimeZone(zone));
+        String localTime = format.format(now);
+
+        format.setTimeZone(TimeZone.getTimeZone("Africa/Johannesburg"));
+        String sastTime = format.format(now);
+
+        view.setText("●  " + name + "     " + (open ? "OPEN" : "CLOSED")
+                + "\n    Local " + localTime + "     •     SAST " + sastTime);
+        view.setTextColor(open ? GREEN : MUTED);
     }
 
     private void showMarketClosedState() {
@@ -488,63 +607,17 @@ public class MainActivity extends Activity {
             signalText.setText("WAIT");
             signalText.setTextColor(YELLOW);
         }
+
         if (connectionStatus != null) {
             connectionStatus.setText(
-                    "●  MARKET CLOSED • HISTORICAL DATA LOADED");
+                    "● MARKET CLOSED • HISTORICAL DATA LOADED");
             connectionStatus.setTextColor(MUTED);
         }
+
         if (trendText != null) trendText.setText("TREND\nHISTORICAL");
+
         clearTradeLevels();
         resetMtfDisplay();
-    }
-
-    private boolean isForexMarketOpen(Date date) {
-        Calendar newYork = Calendar.getInstance(
-                TimeZone.getTimeZone("America/New_York"), Locale.ENGLISH);
-        newYork.setTime(date);
-
-        int day = newYork.get(Calendar.DAY_OF_WEEK);
-        int totalMinutes = newYork.get(Calendar.HOUR_OF_DAY) * 60
-                + newYork.get(Calendar.MINUTE);
-
-        if (day == Calendar.SATURDAY) return false;
-        if (day == Calendar.SUNDAY) return totalMinutes >= 17 * 60;
-        if (day == Calendar.FRIDAY) return totalMinutes < 17 * 60;
-        return true;
-    }
-
-    private void updateSession(TextView view, String name, String timeZoneId,
-                               int openHour, int closeHour) {
-        if (view == null) return;
-
-        Calendar local = Calendar.getInstance(
-                TimeZone.getTimeZone(timeZoneId), Locale.ENGLISH);
-        Date now = new Date();
-        local.setTime(now);
-
-        int day = local.get(Calendar.DAY_OF_WEEK);
-        int hour = local.get(Calendar.HOUR_OF_DAY);
-        int minute = local.get(Calendar.MINUTE);
-        boolean weekend = day == Calendar.SATURDAY || day == Calendar.SUNDAY;
-        int totalMinutes = hour * 60 + minute;
-        boolean open = !weekend && totalMinutes >= openHour * 60
-                && totalMinutes < closeHour * 60;
-
-        SimpleDateFormat localFormat =
-                new SimpleDateFormat("HH:mm", Locale.ENGLISH);
-        localFormat.setTimeZone(TimeZone.getTimeZone(timeZoneId));
-
-        SimpleDateFormat sastFormat =
-                new SimpleDateFormat("HH:mm", Locale.ENGLISH);
-        sastFormat.setTimeZone(
-                TimeZone.getTimeZone("Africa/Johannesburg"));
-
-        String localTime = localFormat.format(now);
-        String sastTime = sastFormat.format(now);
-
-        view.setText("●  " + name + "     " + (open ? "OPEN" : "CLOSED")
-                + "\n    Local " + localTime + "     •     SAST " + sastTime);
-        view.setTextColor(open ? GREEN : MUTED);
     }
 
     private void connectToMarketData() {
@@ -553,6 +626,7 @@ public class MainActivity extends Activity {
 
         signalRepository = new SignalRepository(
                 marketDataProvider, new SignalRepository.SignalCallback() {
+
             @Override
             public void onCandles(String symbol, String timeframe,
                                   List<Candle> candles) {
@@ -575,8 +649,9 @@ public class MainActivity extends Activity {
 
                     if (!isForexMarketOpen(new Date())) {
                         updatePrimaryDashboard(signal);
+
                         connectionStatus.setText(
-                                "●  HISTORICAL SIGNAL DATA • MARKET CLOSED");
+                                "● HISTORICAL SIGNAL DATA • MARKET CLOSED");
                         connectionStatus.setTextColor(MUTED);
                         return;
                     }
@@ -591,23 +666,35 @@ public class MainActivity extends Activity {
             public void onError(String message) {
                 runOnUiThread(() -> {
                     mtfScanning = false;
-                    connectionStatus.setText(
-                            "●  DATA ERROR • " + selectedMarket);
-                    connectionStatus.setTextColor(RED);
-                    signalText.setText("WAIT");
-                    signalText.setTextColor(YELLOW);
 
-                    if (message != null && !message.trim().isEmpty()) {
+                    if (connectionStatus != null) {
+                        connectionStatus.setText(
+                                "● DATA ERROR • " + selectedMarket);
+                        connectionStatus.setTextColor(RED);
+                    }
+
+                    if (signalText != null) {
+                        signalText.setText("WAIT");
+                        signalText.setTextColor(YELLOW);
+                    }
+
+                    if (nextMarketText != null && message != null
+                            && !message.trim().isEmpty()) {
                         nextMarketText.setText("DATA ERROR • " + message);
                     }
-                    mtfConfluenceText.setText("MTF CONFLUENCE • DATA ERROR");
-                    mtfConfluenceText.setTextColor(RED);
+
+                    if (mtfConfluenceText != null) {
+                        mtfConfluenceText.setText("MTF CONFLUENCE • DATA ERROR");
+                        mtfConfluenceText.setTextColor(RED);
+                    }
+
                     resetMtfDisplay();
                 });
             }
         });
 
         requestChartCandles();
+
         if (isForexMarketOpen(new Date())) {
             requestCurrentSignal();
         } else {
@@ -622,13 +709,14 @@ public class MainActivity extends Activity {
         final String timeframe = selectedTimeframe;
 
         if (connectionStatus != null) {
-            connectionStatus.setText("●  LOADING CHART • "
+            connectionStatus.setText("● LOADING CHART • "
                     + market + " • " + timeframe);
             connectionStatus.setTextColor(YELLOW);
         }
 
         marketDataProvider.requestCandles(market, timeframe,
                 new MarketDataManager.MarketDataCallback() {
+
             @Override
             public void onCandlesReceived(List<Candle> candles) {
                 runOnUiThread(() -> {
@@ -636,7 +724,7 @@ public class MainActivity extends Activity {
                             || !timeframe.equals(selectedTimeframe)) return;
 
                     if (candles == null || candles.isEmpty()) {
-                        connectionStatus.setText("●  CHART DATA EMPTY");
+                        connectionStatus.setText("● CHART DATA EMPTY");
                         connectionStatus.setTextColor(RED);
                         return;
                     }
@@ -646,19 +734,18 @@ public class MainActivity extends Activity {
                     updateIndicatorDashboard(market, candles);
 
                     Candle latest = candles.get(candles.size() - 1);
-                    if (latest != null) {
-                        double close = latest.getClose();
-                        if (!Double.isNaN(close) && !Double.isInfinite(close)) {
-                            priceText.setText("PRICE  " + formatPrice(market, close));
-                        }
+                    if (latest != null && Double.isFinite(latest.getClose())) {
+                        priceText.setText("PRICE  "
+                                + formatPrice(market, latest.getClose()));
                     }
 
                     boolean open = isForexMarketOpen(new Date());
+
                     connectionStatus.setText((open
-                            ? "●  LIVE CHART • "
-                            : "●  HISTORICAL CHART • ")
+                            ? "● LIVE CHART • " : "● HISTORICAL CHART • ")
                             + market + " • " + timeframe + " • "
                             + candles.size() + " CANDLES");
+
                     connectionStatus.setTextColor(open ? GREEN : MUTED);
                 });
             }
@@ -666,8 +753,7 @@ public class MainActivity extends Activity {
             @Override
             public void onPriceReceived(double price) {
                 runOnUiThread(() -> {
-                    if (!market.equals(selectedMarket)) return;
-                    if (!Double.isNaN(price) && !Double.isInfinite(price)) {
+                    if (market.equals(selectedMarket) && Double.isFinite(price)) {
                         priceText.setText("PRICE  " + formatPrice(market, price));
                     }
                 });
@@ -677,8 +763,10 @@ public class MainActivity extends Activity {
             public void onError(String message) {
                 runOnUiThread(() -> {
                     if (!market.equals(selectedMarket)) return;
-                    connectionStatus.setText("●  CHART DATA ERROR");
+
+                    connectionStatus.setText("● CHART DATA ERROR");
                     connectionStatus.setTextColor(RED);
+
                     nextMarketText.setText("CHART ERROR • "
                             + (message == null ? "UNKNOWN ERROR" : message));
                     nextMarketText.setTextColor(RED);
@@ -697,27 +785,23 @@ public class MainActivity extends Activity {
 
         if (trendText != null) {
             trendText.setText("TREND\n" + (trend == null ? "--" : trend));
-            if ("BULLISH".equalsIgnoreCase(trend)) {
-                trendText.setTextColor(GREEN);
-            } else if ("BEARISH".equalsIgnoreCase(trend)) {
-                trendText.setTextColor(RED);
-            } else {
-                trendText.setTextColor(WHITE);
-            }
+            trendText.setTextColor("BULLISH".equalsIgnoreCase(trend) ? GREEN
+                    : "BEARISH".equalsIgnoreCase(trend) ? RED : WHITE);
         }
 
         if (rsiText != null) {
+            rsiText.setText(Double.isFinite(rsi)
+                    ? "RSI\n" + String.format(Locale.US, "%.2f", rsi)
+                    : "RSI\n--");
+
             if (Double.isFinite(rsi)) {
-                rsiText.setText("RSI\n" + String.format(Locale.US, "%.2f", rsi));
                 rsiText.setTextColor(rsi >= 70 ? RED : rsi <= 30 ? GREEN : WHITE);
-            } else {
-                rsiText.setText("RSI\n--");
             }
         }
 
         if (atrText != null) {
-            atrText.setText("ATR\n" + (Double.isFinite(atr)
-                    ? formatPrice(market, atr) : "--"));
+            atrText.setText("ATR\n"
+                    + (Double.isFinite(atr) ? formatPrice(market, atr) : "--"));
         }
 
         if (momentumText != null) {
@@ -735,22 +819,24 @@ public class MainActivity extends Activity {
             return;
         }
 
-        final String marketToScan = selectedMarket;
-        final String timeframeToScan = selectedTimeframe;
+        final String market = selectedMarket;
+        final String timeframe = selectedTimeframe;
 
         pendingPrimarySignal = null;
         mtfResults.clear();
         resetMtfDisplay();
 
-        connectionStatus.setText("●  SCANNING "
-                + marketToScan + " • " + timeframeToScan);
+        connectionStatus.setText("● SCANNING "
+                + market + " • " + timeframe);
         connectionStatus.setTextColor(YELLOW);
+
         signalText.setText("WAIT");
         signalText.setTextColor(YELLOW);
+
         clearTradeLevels();
         priceText.setText("PRICE  --");
 
-        signalRepository.requestSignal(marketToScan, timeframeToScan);
+        signalRepository.requestSignal(market, timeframe);
     }
 
     private void requestMultiTimeframeAnalysis(String market) {
@@ -758,6 +844,7 @@ public class MainActivity extends Activity {
             finishMtfWithWait("NO DATA PROVIDER");
             return;
         }
+
         if (!isForexMarketOpen(new Date())) return;
 
         mtfResults.clear();
@@ -767,31 +854,35 @@ public class MainActivity extends Activity {
 
         mtfConfluenceText.setText("MTF CONFLUENCE • SCANNING 1/6");
         mtfConfluenceText.setTextColor(YELLOW);
+
         connectionStatus.setText(
-                "●  PRIMARY SIGNAL FOUND • CHECKING 6 TIMEFRAMES");
+                "● PRIMARY SIGNAL FOUND • CHECKING TIMEFRAMES");
         connectionStatus.setTextColor(YELLOW);
+
         requestNextMtfTimeframe(market);
     }
 
     private void requestNextMtfTimeframe(String market) {
         if (!mtfScanning) return;
+
         if (!isForexMarketOpen(new Date())) {
             mtfScanning = false;
             return;
         }
+
         if (mtfRequestIndex >= timeframes.length) {
             finishMtfAnalysis();
             return;
         }
 
-        final int currentIndex = mtfRequestIndex;
-        final String timeframe = timeframes[currentIndex];
+        final String timeframe = timeframes[mtfRequestIndex];
 
         mtfConfluenceText.setText("MTF CONFLUENCE • SCANNING "
-                + (currentIndex + 1) + "/6 • " + timeframe);
+                + (mtfRequestIndex + 1) + "/6 • " + timeframe);
 
         marketDataProvider.requestCandles(market, timeframe,
                 new MarketDataManager.MarketDataCallback() {
+
             @Override
             public void onCandlesReceived(List<Candle> candles) {
                 runOnUiThread(() -> {
@@ -800,6 +891,7 @@ public class MainActivity extends Activity {
                     MultiTimeframeEngine.TimeframeResult result =
                             MultiTimeframeEngine.analyzeTimeframe(
                                     market, timeframe, candles);
+
                     mtfResults.add(result);
                     updateMtfBox(timeframe, result);
                     mtfRequestIndex++;
@@ -826,12 +918,11 @@ public class MainActivity extends Activity {
                 runOnUiThread(() -> {
                     if (!mtfScanning) return;
 
-                    MultiTimeframeEngine.TimeframeResult result =
-                            new MultiTimeframeEngine.TimeframeResult(
-                                    timeframe, Signal.Direction.WAIT,
-                                    "DATA ERROR", Double.NaN, Double.NaN);
-                    mtfResults.add(result);
-                    updateMtfBox(timeframe, result);
+                    mtfResults.add(new MultiTimeframeEngine.TimeframeResult(
+                            timeframe, Signal.Direction.WAIT,
+                            "DATA ERROR", Double.NaN, Double.NaN));
+
+                    updateMtfBox(timeframe, mtfResults.get(mtfResults.size() - 1));
                     mtfRequestIndex++;
 
                     if (mtfRequestIndex < timeframes.length) {
@@ -857,37 +948,39 @@ public class MainActivity extends Activity {
                 + confluence.getWaitCount() + " • STRENGTH "
                 + confluence.getStrength());
 
-        Signal.Direction mtfDirection = confluence.getDirection();
         if (pendingPrimarySignal == null) {
             finishMtfWithWait("NO PRIMARY SIGNAL");
             return;
         }
 
-        Signal.Direction primaryDirection = pendingPrimarySignal.getDirection();
-        boolean primaryIsTrade = primaryDirection == Signal.Direction.BUY
-                || primaryDirection == Signal.Direction.SELL;
-        boolean mtfIsTrade = mtfDirection == Signal.Direction.BUY
-                || mtfDirection == Signal.Direction.SELL;
+        Signal.Direction primary = pendingPrimarySignal.getDirection();
+        Signal.Direction mtf = confluence.getDirection();
 
-        boolean confirmed = primaryIsTrade && mtfIsTrade
-                && primaryDirection == mtfDirection
-                && confluence.getStrength() >= 3;
+        boolean primaryTrade = primary == Signal.Direction.BUY
+                || primary == Signal.Direction.SELL;
+
+        boolean mtfTrade = mtf == Signal.Direction.BUY
+                || mtf == Signal.Direction.SELL;
+
+        boolean confirmed = primaryTrade && mtfTrade
+                && primary == mtf && confluence.getStrength() >= 3;
 
         if (confirmed) {
-            int color = mtfDirection == Signal.Direction.BUY ? GREEN : RED;
+            int color = mtf == Signal.Direction.BUY ? GREEN : RED;
+
             mtfConfluenceText.setTextColor(color);
-            connectionStatus.setText("●  MTF CONFIRMED • "
-                    + mtfDirection.name() + " • STRENGTH "
-                    + confluence.getStrength());
+            connectionStatus.setText("● MTF CONFIRMED • "
+                    + mtf.name() + " • STRENGTH " + confluence.getStrength());
             connectionStatus.setTextColor(color);
 
             if (forexChartView != null) {
                 forexChartView.setTradeLevels(pendingPrimarySignal);
             }
+
             updateDashboard(pendingPrimarySignal);
         } else {
             mtfConfluenceText.setTextColor(YELLOW);
-            connectionStatus.setText("●  MTF NOT CONFIRMED • WAIT");
+            connectionStatus.setText("● MTF NOT CONFIRMED • WAIT");
             connectionStatus.setTextColor(YELLOW);
             signalText.setText("WAIT");
             signalText.setTextColor(YELLOW);
@@ -897,12 +990,18 @@ public class MainActivity extends Activity {
 
     private void finishMtfWithWait(String reason) {
         mtfScanning = false;
+
         if (signalText != null) {
             signalText.setText("WAIT");
             signalText.setTextColor(YELLOW);
         }
+
         clearTradeLevels();
-        if (forexChartView != null) forexChartView.clearTradeLevels();
+
+        if (forexChartView != null) {
+            forexChartView.clearTradeLevels();
+        }
+
         if (mtfConfluenceText != null) {
             mtfConfluenceText.setText("MTF CONFLUENCE • WAIT • " + reason);
             mtfConfluenceText.setTextColor(YELLOW);
@@ -925,8 +1024,9 @@ public class MainActivity extends Activity {
 
     private void updateMtfBox(String timeframe,
                               MultiTimeframeEngine.TimeframeResult result) {
-        if (result == null) return;
-        setMtfBox(getMtfTextView(timeframe), timeframe, result.getDirection());
+        if (result != null) {
+            setMtfBox(getMtfTextView(timeframe), timeframe, result.getDirection());
+        }
     }
 
     private TextView getMtfTextView(String timeframe) {
@@ -941,15 +1041,12 @@ public class MainActivity extends Activity {
     private void setMtfBox(TextView view, String timeframe,
                            Signal.Direction direction) {
         if (view == null) return;
+
         String label = direction == null ? "WAIT" : direction.name();
         view.setText(timeframe + "\n" + label);
-        if (direction == Signal.Direction.BUY) {
-            view.setTextColor(GREEN);
-        } else if (direction == Signal.Direction.SELL) {
-            view.setTextColor(RED);
-        } else {
-            view.setTextColor(YELLOW);
-        }
+
+        view.setTextColor(direction == Signal.Direction.BUY ? GREEN
+                : direction == Signal.Direction.SELL ? RED : YELLOW);
     }
 
     private void updatePrimaryDashboard(Signal signal) {
@@ -963,24 +1060,30 @@ public class MainActivity extends Activity {
         }
 
         trendText.setText("TREND\n" + signal.getTrend());
+
         rsiText.setText(Double.isNaN(signal.getRsi()) ? "RSI\n--"
                 : "RSI\n" + String.format(Locale.US, "%.2f", signal.getRsi()));
+
         atrText.setText(Double.isNaN(signal.getAtr()) ? "ATR\n--"
                 : "ATR\n" + formatPrice(signal.getSymbol(), signal.getAtr()));
+
         momentumText.setText("TIMEFRAME\n" + signal.getTimeframe());
     }
 
     private void updateDashboard(Signal signal) {
         if (signal == null) return;
+
         if (!isForexMarketOpen(new Date())) {
             updatePrimaryDashboard(signal);
             return;
         }
+
         if (!selectedMarket.equals(signal.getSymbol())
                 || !selectedTimeframe.equals(signal.getTimeframe())) return;
 
         marketName.setText(signal.getSymbol());
-        connectionStatus.setText("●  LIVE DATA • MTF CONFIRMED • "
+
+        connectionStatus.setText("● LIVE DATA • MTF CONFIRMED • "
                 + signal.getSymbol() + " • " + signal.getTimeframe());
 
         connectionStatus.setTextColor(
@@ -992,31 +1095,42 @@ public class MainActivity extends Activity {
                 : "PRICE  " + formatPrice(signal.getSymbol(), signal.getEntry()));
 
         signalText.setText(signal.getDirection().name());
-        signalText.setTextColor(signal.getDirection() == Signal.Direction.BUY
-                ? GREEN : signal.getDirection() == Signal.Direction.SELL
-                ? RED : YELLOW);
+        signalText.setTextColor(
+                signal.getDirection() == Signal.Direction.BUY ? GREEN
+                        : signal.getDirection() == Signal.Direction.SELL ? RED
+                        : YELLOW);
 
         trendText.setText("TREND\n" + signal.getTrend());
+
         rsiText.setText(Double.isNaN(signal.getRsi()) ? "RSI\n--"
                 : "RSI\n" + String.format(Locale.US, "%.2f", signal.getRsi()));
+
         atrText.setText(Double.isNaN(signal.getAtr()) ? "ATR\n--"
                 : "ATR\n" + formatPrice(signal.getSymbol(), signal.getAtr()));
+
         momentumText.setText("TIMEFRAME\n" + signal.getTimeframe());
 
         if (signal.getDirection() == Signal.Direction.BUY
                 || signal.getDirection() == Signal.Direction.SELL) {
+
             entryText.setText("ENTRY                         "
                     + formatPrice(signal.getSymbol(), signal.getEntry()));
+
             stopLossText.setText("STOP LOSS                  "
                     + formatPrice(signal.getSymbol(), signal.getStopLoss()));
+
             tp1Text.setText("TAKE PROFIT 1          "
                     + formatPrice(signal.getSymbol(), signal.getTakeProfit1()));
+
             tp2Text.setText("TAKE PROFIT 2          "
                     + formatPrice(signal.getSymbol(), signal.getTakeProfit2()));
+
             tp3Text.setText("TAKE PROFIT 3          "
                     + formatPrice(signal.getSymbol(), signal.getTakeProfit3()));
 
-            if (forexChartView != null) forexChartView.setTradeLevels(signal);
+            if (forexChartView != null) {
+                forexChartView.setTradeLevels(signal);
+            }
         } else {
             clearTradeLevels();
         }
@@ -1028,18 +1142,28 @@ public class MainActivity extends Activity {
         if (tp1Text != null) tp1Text.setText("TAKE PROFIT 1          --");
         if (tp2Text != null) tp2Text.setText("TAKE PROFIT 2          --");
         if (tp3Text != null) tp3Text.setText("TAKE PROFIT 3          --");
-        if (forexChartView != null) forexChartView.clearTradeLevels();
+
+        if (forexChartView != null) {
+            forexChartView.clearTradeLevels();
+        }
     }
 
     private String formatPrice(String symbol, double value) {
-        if (Double.isNaN(value) || Double.isInfinite(value)) return "--";
+        if (!Double.isFinite(value)) return "--";
+
         if ("USD/JPY".equalsIgnoreCase(symbol)) {
             return String.format(Locale.US, "%.3f", value);
         }
+
         if ("XAU/USD".equalsIgnoreCase(symbol)) {
             return String.format(Locale.US, "%.2f", value);
         }
+
         return String.format(Locale.US, "%.5f", value);
+    }
+
+    private int dp(float value) {
+        return (int) (value * getResources().getDisplayMetrics().density + 0.5f);
     }
 
     private TextView createText(String text, float size, int color, boolean bold) {
@@ -1047,7 +1171,11 @@ public class MainActivity extends Activity {
         view.setText(text);
         view.setTextSize(size);
         view.setTextColor(color);
-        if (bold) view.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+
+        if (bold) {
+            view.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        }
+
         return view;
     }
 
@@ -1055,25 +1183,42 @@ public class MainActivity extends Activity {
         return createText(text, 11, MUTED, true);
     }
 
-    private TextView createSessionRow(String name) {
-        TextView view = createText("●  " + name + "     CHECKING...",
-                13, MUTED, true);
-        view.setPadding(14, 13, 14, 13);
+    private Button createButton(String text) {
+        Button button = new Button(this);
+        button.setText(text);
+        button.setTextSize(13);
+        button.setTextColor(Color.WHITE);
+        button.setAllCaps(false);
+        button.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
 
         GradientDrawable background = new GradientDrawable();
-        background.setColor(Color.rgb(10, 16, 25));
-        background.setStroke(1, CARD_BORDER);
-        background.setCornerRadius(12);
-        view.setBackground(background);
+        background.setColor(BUTTON_BACKGROUND);
+        background.setCornerRadius(dp(14));
+        button.setBackground(background);
+
+        return button;
+    }
+
+    private TextView createSessionRow(String name) {
+        TextView view = createText(
+                "● " + name + "     CHECKING...", 13, MUTED, true);
+
+        view.setPadding(dp(14), dp(13), dp(14), dp(13));
+        view.setBackground(createRoundedBackground(FIELD_BACKGROUND,
+                CARD_BORDER, 12));
+
         return view;
     }
 
     private Spinner createSpinner(String[] values) {
         Spinner spinner = new Spinner(this);
+
         ArrayAdapter<String> adapter = new ArrayAdapter<>(
                 this, android.R.layout.simple_spinner_item, values);
+
         adapter.setDropDownViewResource(
                 android.R.layout.simple_spinner_dropdown_item);
+
         spinner.setAdapter(adapter);
         return spinner;
     }
@@ -1081,44 +1226,37 @@ public class MainActivity extends Activity {
     private TextView createMetric(String label, String value) {
         TextView view = createText(label + "\n" + value, 14, WHITE, true);
         view.setGravity(Gravity.CENTER);
-        view.setPadding(12, 15, 12, 15);
+        view.setPadding(dp(12), dp(15), dp(12), dp(15));
+        view.setBackground(createRoundedBackground(
+                FIELD_BACKGROUND, CARD_BORDER, 14));
 
-        GradientDrawable background = new GradientDrawable();
-        background.setColor(Color.rgb(10, 16, 25));
-        background.setStroke(1, CARD_BORDER);
-        background.setCornerRadius(14);
-        view.setBackground(background);
         return view;
     }
 
     private TextView createTradeRow(String label, int color) {
         TextView view = createText(label + "                         --",
                 14, color, true);
-        view.setPadding(14, 14, 14, 14);
 
-        GradientDrawable background = new GradientDrawable();
-        background.setColor(Color.rgb(10, 16, 25));
-        background.setCornerRadius(12);
-        view.setBackground(background);
+        view.setPadding(dp(14), dp(14), dp(14), dp(14));
+        view.setBackground(createRoundedBackground(FIELD_BACKGROUND, 0, 12));
+
         return view;
     }
 
     private TextView createTimeframeBox(String text) {
         TextView view = createText(text, 12, WHITE, true);
         view.setGravity(Gravity.CENTER);
-        view.setPadding(20, 14, 20, 14);
+        view.setPadding(dp(20), dp(14), dp(20), dp(14));
+        view.setBackground(createRoundedBackground(
+                FIELD_BACKGROUND, CARD_BORDER, 14));
 
-        GradientDrawable background = new GradientDrawable();
-        background.setColor(Color.rgb(10, 16, 25));
-        background.setStroke(1, CARD_BORDER);
-        background.setCornerRadius(14);
-        view.setBackground(background);
-
-        LinearLayout.LayoutParams boxParams = new LinearLayout.LayoutParams(
+        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT);
-        boxParams.setMargins(0, 0, 8, 0);
-        view.setLayoutParams(boxParams);
+
+        p.setMargins(0, 0, dp(8), 0);
+        view.setLayoutParams(p);
+
         return view;
     }
 
@@ -1131,36 +1269,54 @@ public class MainActivity extends Activity {
     private LinearLayout createCard() {
         LinearLayout card = new LinearLayout(this);
         card.setOrientation(LinearLayout.VERTICAL);
-        card.setPadding(18, 18, 18, 18);
+        card.setPadding(dp(18), dp(18), dp(18), dp(18));
+        card.setBackground(createRoundedBackground(CARD, CARD_BORDER, 18));
 
-        GradientDrawable background = new GradientDrawable();
-        background.setColor(CARD);
-        background.setStroke(1, CARD_BORDER);
-        background.setCornerRadius(18);
-        card.setBackground(background);
         return card;
+    }
+
+    private GradientDrawable createRoundedBackground(
+            int color, int strokeColor, int radius) {
+        GradientDrawable background = new GradientDrawable();
+        background.setColor(color);
+        background.setCornerRadius(dp(radius));
+
+        if (strokeColor != 0) {
+            background.setStroke(dp(1), strokeColor);
+        }
+
+        return background;
     }
 
     private LinearLayout.LayoutParams params(int topMargin) {
         LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT);
-        p.topMargin = topMargin;
+
+        p.topMargin = dp(topMargin);
         return p;
     }
 
     private LinearLayout.LayoutParams weightParams() {
         LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(
                 0, LinearLayout.LayoutParams.WRAP_CONTENT, 1);
-        p.setMargins(4, 0, 4, 0);
+
+        p.setMargins(dp(4), 0, dp(4), 0);
         return p;
     }
 
     @Override
     protected void onDestroy() {
         clockHandler.removeCallbacks(clockRunnable);
-        if (signalRepository != null) signalRepository.stop();
-        if (marketDataProvider != null) marketDataProvider.stop();
+
+        if (signalRepository != null) {
+            signalRepository.stop();
+        }
+
+        if (marketDataProvider != null) {
+            marketDataProvider.stop();
+        }
+
         super.onDestroy();
     }
 }
