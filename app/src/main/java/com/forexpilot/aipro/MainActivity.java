@@ -1,4 +1,3 @@
-
 package com.forexpilot.aipro;
 
 import android.app.Activity;
@@ -45,6 +44,15 @@ public class MainActivity extends Activity {
     private TextView entryText, stopLossText, tp1Text, tp2Text, tp3Text;
     private TextView mtf5mText, mtf15mText, mtf30mText;
     private TextView mtf1hText, mtf4hText, mtf1dText, mtfConfluenceText;
+
+    // AUTOMATIC TRADE-STYLE DISPLAY
+    private TextView homeTradeStyleText, homeConfidenceText;
+    private TextView homeReviewTimeText, homeStyleReasonText;
+
+    private TextView tradeStyleText, confidenceText;
+    private TextView reviewTimeText, styleReasonText;
+
+    private TradeStyleEngine.TradeStylePlan currentTradeStylePlan;
 
     private Spinner marketSpinner, timeframeSpinner;
     private Button scanButton, chartStyleButton, themeButton;
@@ -156,6 +164,8 @@ public class MainActivity extends Activity {
 
         if (signalRepository != null && isForexMarketOpen(new Date())) {
             requestCurrentSignal();
+        } else {
+            resetTradeStyleDisplay();
         }
     }
 
@@ -202,7 +212,7 @@ public class MainActivity extends Activity {
         LinearLayout clockCard = createCard();
         clockCard.addView(createSmallLabel("SOUTH AFRICAN MARKET CLOCK"));
 
-        clockText = createText("--:--:-- SAST", 27, WHITE, true);
+        clockText = createText(" --:--:-- SAST", 27, WHITE, true);
         clockCard.addView(clockText, params(6));
 
         dateText = createText("--", 12, MUTED, false);
@@ -242,6 +252,7 @@ public class MainActivity extends Activity {
         priceCard.addView(priceText, params(5));
         home.addView(priceCard, params(8));
 
+        // AI SIGNAL CARD
         LinearLayout signalCard = createCard();
         signalCard.addView(createSmallLabel("AI SIGNAL"));
 
@@ -254,6 +265,28 @@ public class MainActivity extends Activity {
                 12, MUTED, false);
         signalDescription.setGravity(Gravity.CENTER);
         signalCard.addView(signalDescription, params(4));
+
+        homeTradeStyleText = createText(
+                "TRADE STYLE • WAIT", 17, YELLOW, true);
+        homeTradeStyleText.setGravity(Gravity.CENTER);
+        signalCard.addView(homeTradeStyleText, params(10));
+
+        homeConfidenceText = createText(
+                "RULE-BASED CONFIDENCE • --", 13, MUTED, true);
+        homeConfidenceText.setGravity(Gravity.CENTER);
+        signalCard.addView(homeConfidenceText, params(5));
+
+        homeReviewTimeText = createText(
+                "SUGGESTED REVIEW • --", 13, MUTED, true);
+        homeReviewTimeText.setGravity(Gravity.CENTER);
+        signalCard.addView(homeReviewTimeText, params(5));
+
+        homeStyleReasonText = createText(
+                "Waiting for confirmed timeframe agreement.",
+                12, MUTED, false);
+        homeStyleReasonText.setGravity(Gravity.CENTER);
+        signalCard.addView(homeStyleReasonText, params(5));
+
         home.addView(signalCard, params(8));
 
         scanButton = createButton("SCAN MARKET");
@@ -376,6 +409,20 @@ public class MainActivity extends Activity {
                 "Trade levels appear after signal confirmation.",
                 12, MUTED, false), params(4));
 
+        tradeStyleText = createTradeRow("TRADE STYLE", YELLOW);
+        confidenceText = createTradeRow("RULE-BASED CONFIDENCE", MUTED);
+        reviewTimeText = createTradeRow("SUGGESTED REVIEW", MUTED);
+
+        styleReasonText = createText(
+                "Waiting for confirmed timeframe agreement.",
+                12, MUTED, false);
+        styleReasonText.setPadding(dp(12), dp(8), dp(12), dp(8));
+
+        tradeCard.addView(tradeStyleText, params(10));
+        tradeCard.addView(confidenceText, params(6));
+        tradeCard.addView(reviewTimeText, params(6));
+        tradeCard.addView(styleReasonText, params(6));
+
         entryText = createTradeRow("ENTRY", BLUE);
         stopLossText = createTradeRow("STOP LOSS", RED);
         tp1Text = createTradeRow("TAKE PROFIT 1", GREEN);
@@ -441,6 +488,7 @@ public class MainActivity extends Activity {
         aboutCard.addView(createText(
                 "Market scanner • Technical indicators"
                         + "\nMulti-timeframe confirmation"
+                        + "\nAutomatic trade-style selection"
                         + "\nTrade planning tools"
                         + "\n\nSignals are informational and are not "
                         + "financial advice.",
@@ -517,6 +565,7 @@ public class MainActivity extends Activity {
             public void onNothingSelected(AdapterView<?> parent) { }
         });
 
+        resetTradeStyleDisplay();
         showPage(currentPage);
     }
 
@@ -599,6 +648,135 @@ public class MainActivity extends Activity {
         }
     }
 
+    // AUTOMATIC TRADE-STYLE DISPLAY
+
+    private void updateTradeStyleDisplay(
+            TradeStyleEngine.TradeStylePlan plan) {
+
+        if (plan == null || !plan.isTradeAllowed()) {
+            resetTradeStyleDisplay();
+            return;
+        }
+
+        currentTradeStylePlan = plan;
+
+        String styleName;
+        switch (plan.getStyle()) {
+            case SCALP:
+                styleName = "SCALP";
+                break;
+            case DAY_TRADE:
+                styleName = "DAY TRADE";
+                break;
+            case SWING:
+                styleName = "SWING";
+                break;
+            default:
+                resetTradeStyleDisplay();
+                return;
+        }
+
+        int directionColor =
+                plan.getDirection() == Signal.Direction.BUY ? GREEN : RED;
+
+        String styleLabel = "TRADE STYLE • " + styleName
+                + " • " + plan.getDirection().name();
+
+        String confidenceLabel = "RULE-BASED CONFIDENCE • "
+                + plan.getConfidence() + "/100";
+
+        String reviewLabel = "SUGGESTED REVIEW • "
+                + plan.getReviewTime();
+
+        if (homeTradeStyleText != null) {
+            homeTradeStyleText.setText(styleLabel);
+            homeTradeStyleText.setTextColor(directionColor);
+        }
+
+        if (homeConfidenceText != null) {
+            homeConfidenceText.setText(confidenceLabel);
+            homeConfidenceText.setTextColor(WHITE);
+        }
+
+        if (homeReviewTimeText != null) {
+            homeReviewTimeText.setText(reviewLabel);
+            homeReviewTimeText.setTextColor(BLUE);
+        }
+
+        if (homeStyleReasonText != null) {
+            homeStyleReasonText.setText(plan.getReason());
+            homeStyleReasonText.setTextColor(MUTED);
+        }
+
+        if (tradeStyleText != null) {
+            tradeStyleText.setText(styleLabel);
+            tradeStyleText.setTextColor(directionColor);
+        }
+
+        if (confidenceText != null) {
+            confidenceText.setText(confidenceLabel);
+            confidenceText.setTextColor(WHITE);
+        }
+
+        if (reviewTimeText != null) {
+            reviewTimeText.setText(reviewLabel);
+            reviewTimeText.setTextColor(BLUE);
+        }
+
+        if (styleReasonText != null) {
+            styleReasonText.setText(plan.getReason()
+                    + "\n\nReview time is a reminder to reassess the market, "
+                    + "not a guaranteed exit time.");
+            styleReasonText.setTextColor(MUTED);
+        }
+    }
+
+    private void resetTradeStyleDisplay() {
+        currentTradeStylePlan = null;
+
+        if (homeTradeStyleText != null) {
+            homeTradeStyleText.setText("TRADE STYLE • WAIT");
+            homeTradeStyleText.setTextColor(YELLOW);
+        }
+
+        if (homeConfidenceText != null) {
+            homeConfidenceText.setText("RULE-BASED CONFIDENCE • --");
+            homeConfidenceText.setTextColor(MUTED);
+        }
+
+        if (homeReviewTimeText != null) {
+            homeReviewTimeText.setText("SUGGESTED REVIEW • --");
+            homeReviewTimeText.setTextColor(MUTED);
+        }
+
+        if (homeStyleReasonText != null) {
+            homeStyleReasonText.setText(
+                    "Waiting for confirmed timeframe agreement.");
+            homeStyleReasonText.setTextColor(MUTED);
+        }
+
+        if (tradeStyleText != null) {
+            tradeStyleText.setText("TRADE STYLE • WAIT");
+            tradeStyleText.setTextColor(YELLOW);
+        }
+
+        if (confidenceText != null) {
+            confidenceText.setText("RULE-BASED CONFIDENCE • --");
+            confidenceText.setTextColor(MUTED);
+        }
+
+        if (reviewTimeText != null) {
+            reviewTimeText.setText("SUGGESTED REVIEW • --");
+            reviewTimeText.setTextColor(MUTED);
+        }
+
+        if (styleReasonText != null) {
+            styleReasonText.setText(
+                    "Waiting for confirmed timeframe agreement.");
+            styleReasonText.setTextColor(MUTED);
+        }
+    }
+
     private void resetForNewSelection() {
         mtfScanning = false;
         pendingPrimarySignal = null;
@@ -606,6 +784,7 @@ public class MainActivity extends Activity {
         mtfRequestIndex = 0;
 
         resetMtfDisplay();
+        resetTradeStyleDisplay();
         clearTradeLevels();
 
         if (signalText != null) {
@@ -690,6 +869,10 @@ public class MainActivity extends Activity {
 
         if (open && !lastForexOpen && signalRepository != null) {
             requestCurrentSignal();
+        }
+
+        if (!open && lastForexOpen) {
+            resetTradeStyleDisplay();
         }
 
         lastForexOpen = open;
@@ -778,6 +961,7 @@ public class MainActivity extends Activity {
 
         clearTradeLevels();
         resetMtfDisplay();
+        resetTradeStyleDisplay();
     }
 
     private void connectToMarketData() {
@@ -811,6 +995,7 @@ public class MainActivity extends Activity {
 
                     if (!isForexMarketOpen(new Date())) {
                         updatePrimaryDashboard(signal);
+                        resetTradeStyleDisplay();
 
                         connectionStatus.setText(
                                 "● HISTORICAL SIGNAL DATA • MARKET CLOSED");
@@ -819,6 +1004,7 @@ public class MainActivity extends Activity {
                     }
 
                     pendingPrimarySignal = signal;
+                    resetTradeStyleDisplay();
                     updatePrimaryDashboard(signal);
                     requestMultiTimeframeAnalysis(signal.getSymbol());
                 });
@@ -828,6 +1014,9 @@ public class MainActivity extends Activity {
             public void onError(String message) {
                 runOnUiThread(() -> {
                     mtfScanning = false;
+                    pendingPrimarySignal = null;
+                    resetTradeStyleDisplay();
+                    clearTradeLevels();
 
                     if (connectionStatus != null) {
                         connectionStatus.setText(
@@ -994,6 +1183,7 @@ public class MainActivity extends Activity {
 
         if (!isForexMarketOpen(new Date())) {
             requestChartCandles();
+            resetTradeStyleDisplay();
             return;
         }
 
@@ -1003,6 +1193,7 @@ public class MainActivity extends Activity {
         pendingPrimarySignal = null;
         mtfResults.clear();
         resetMtfDisplay();
+        resetTradeStyleDisplay();
 
         connectionStatus.setText("● SCANNING "
                 + market + " • " + timeframe);
@@ -1023,12 +1214,16 @@ public class MainActivity extends Activity {
             return;
         }
 
-        if (!isForexMarketOpen(new Date())) return;
+        if (!isForexMarketOpen(new Date())) {
+            resetTradeStyleDisplay();
+            return;
+        }
 
         mtfResults.clear();
         mtfRequestIndex = 0;
         mtfScanning = true;
         resetMtfDisplay();
+        resetTradeStyleDisplay();
 
         mtfConfluenceText.setText("MTF CONFLUENCE • SCANNING 1/6");
         mtfConfluenceText.setTextColor(YELLOW);
@@ -1045,6 +1240,7 @@ public class MainActivity extends Activity {
 
         if (!isForexMarketOpen(new Date())) {
             mtfScanning = false;
+            resetTradeStyleDisplay();
             return;
         }
 
@@ -1085,7 +1281,8 @@ public class MainActivity extends Activity {
             @Override
             public void onPriceReceived(double price) {
                 runOnUiThread(() -> {
-                    if (Double.isFinite(price)) {
+                    if (Double.isFinite(price)
+                            && market.equals(selectedMarket)) {
                         priceText.setText(
                                 "PRICE  " + formatPrice(market, price));
                     }
@@ -1119,7 +1316,11 @@ public class MainActivity extends Activity {
 
     private void finishMtfAnalysis() {
         mtfScanning = false;
-        if (!isForexMarketOpen(new Date())) return;
+
+        if (!isForexMarketOpen(new Date())) {
+            resetTradeStyleDisplay();
+            return;
+        }
 
         MultiTimeframeEngine.ConfluenceResult confluence =
                 MultiTimeframeEngine.calculateConfluence(mtfResults);
@@ -1148,6 +1349,20 @@ public class MainActivity extends Activity {
                 && primary == mtf && confluence.getStrength() >= 3;
 
         if (confirmed) {
+            TradeStyleEngine.TradeStylePlan plan =
+                    TradeStyleEngine.selectBestStyle(
+                            pendingPrimarySignal, mtfResults);
+
+            // Do not publish a trade plan if no style qualifies.
+            if (plan == null || !plan.isTradeAllowed()) {
+                finishMtfWithWait(
+                        "NO SUITABLE STYLE • " +
+                        (plan == null
+                                ? "INSUFFICIENT CONFIRMATION"
+                                : plan.getReason()));
+                return;
+            }
+
             int color = mtf == Signal.Direction.BUY ? GREEN : RED;
 
             mtfConfluenceText.setTextColor(color);
@@ -1155,6 +1370,8 @@ public class MainActivity extends Activity {
                     + mtf.name() + " • STRENGTH "
                     + confluence.getStrength());
             connectionStatus.setTextColor(color);
+
+            updateTradeStyleDisplay(plan);
 
             if (forexChartView != null) {
                 forexChartView.setTradeLevels(pendingPrimarySignal);
@@ -1167,12 +1384,15 @@ public class MainActivity extends Activity {
             connectionStatus.setTextColor(YELLOW);
             signalText.setText("WAIT");
             signalText.setTextColor(YELLOW);
+            resetTradeStyleDisplay();
             clearTradeLevels();
         }
     }
 
     private void finishMtfWithWait(String reason) {
         mtfScanning = false;
+        pendingPrimarySignal = null;
+        resetTradeStyleDisplay();
 
         if (signalText != null) {
             signalText.setText("WAIT");
@@ -1189,6 +1409,11 @@ public class MainActivity extends Activity {
             mtfConfluenceText.setText(
                     "MTF CONFLUENCE • WAIT • " + reason);
             mtfConfluenceText.setTextColor(YELLOW);
+        }
+
+        if (connectionStatus != null) {
+            connectionStatus.setText("● WAIT • " + reason);
+            connectionStatus.setTextColor(YELLOW);
         }
     }
 
@@ -1265,6 +1490,7 @@ public class MainActivity extends Activity {
 
         if (!isForexMarketOpen(new Date())) {
             updatePrimaryDashboard(signal);
+            resetTradeStyleDisplay();
             return;
         }
 
@@ -1330,16 +1556,31 @@ public class MainActivity extends Activity {
                 forexChartView.setTradeLevels(signal);
             }
         } else {
+            resetTradeStyleDisplay();
             clearTradeLevels();
         }
     }
 
     private void clearTradeLevels() {
-        if (entryText != null) entryText.setText("ENTRY                         --");
-        if (stopLossText != null) stopLossText.setText("STOP LOSS                  --");
-        if (tp1Text != null) tp1Text.setText("TAKE PROFIT 1          --");
-        if (tp2Text != null) tp2Text.setText("TAKE PROFIT 2          --");
-        if (tp3Text != null) tp3Text.setText("TAKE PROFIT 3          --");
+        if (entryText != null) {
+            entryText.setText("ENTRY                         --");
+        }
+
+        if (stopLossText != null) {
+            stopLossText.setText("STOP LOSS                  --");
+        }
+
+        if (tp1Text != null) {
+            tp1Text.setText("TAKE PROFIT 1          --");
+        }
+
+        if (tp2Text != null) {
+            tp2Text.setText("TAKE PROFIT 2          --");
+        }
+
+        if (tp3Text != null) {
+            tp3Text.setText("TAKE PROFIT 3          --");
+        }
 
         if (forexChartView != null) {
             forexChartView.clearTradeLevels();
