@@ -1,3 +1,4 @@
+
 package com.forexpilot.aipro;
 
 import android.app.Activity;
@@ -20,11 +21,11 @@ import android.widget.TextView;
 
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
-import java.util.Calendar;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
 import java.util.TimeZone;
+import java.util.Calendar;
 
 public class MainActivity extends Activity {
 
@@ -41,1032 +42,347 @@ public class MainActivity extends Activity {
     private SignalRepository signalRepository;
     private MarketDataProvider marketDataProvider;
 
-    private TextView connectionStatus;
+    private TextView connectionStatus, clockText, dateText;
+    private TextView forexStatusText, nextMarketText;
+    private TextView sydneySessionText, tokyoSessionText;
+    private TextView londonSessionText, newYorkSessionText;
+    private TextView marketName, priceText, signalText;
+    private TextView trendText, rsiText, atrText, momentumText;
+    private TextView entryText, stopLossText, tp1Text, tp2Text, tp3Text;
+    private TextView mtf5mText, mtf15mText, mtf30mText;
+    private TextView mtf1hText, mtf4hText, mtf1dText, mtfConfluenceText;
 
-    private TextView clockText;
-    private TextView dateText;
-    private TextView forexStatusText;
-    private TextView nextMarketText;
-
-    private TextView sydneySessionText;
-    private TextView tokyoSessionText;
-    private TextView londonSessionText;
-    private TextView newYorkSessionText;
-
-    private TextView marketName;
-    private TextView priceText;
-    private TextView signalText;
-    private TextView trendText;
-    private TextView rsiText;
-    private TextView atrText;
-    private TextView momentumText;
-
-    private TextView entryText;
-    private TextView stopLossText;
-    private TextView tp1Text;
-    private TextView tp2Text;
-    private TextView tp3Text;
-
-    private TextView mtf5mText;
-    private TextView mtf15mText;
-    private TextView mtf30mText;
-    private TextView mtf1hText;
-    private TextView mtf4hText;
-    private TextView mtf1dText;
-    private TextView mtfConfluenceText;
-
-    private Spinner marketSpinner;
-    private Spinner timeframeSpinner;
-    private Button scanButton;
+    private Spinner marketSpinner, timeframeSpinner;
+    private Button scanButton, chartStyleButton;
 
     private String selectedMarket = "EUR/USD";
     private String selectedTimeframe = "15M";
-
+    private boolean lineChartMode = false;
     private boolean lastForexOpen = false;
     private boolean mtfScanning = false;
-
     private Signal pendingPrimarySignal;
 
     private final List<MultiTimeframeEngine.TimeframeResult> mtfResults =
             new ArrayList<>();
-
     private int mtfRequestIndex = 0;
 
     private final String[] markets = {
-            "XAU/USD",
-            "EUR/USD",
-            "GBP/USD",
-            "USD/JPY",
-            "NZD/USD"
+            "XAU/USD", "EUR/USD", "GBP/USD", "USD/JPY", "NZD/USD"
     };
-
     private final String[] timeframes = {
-            "5M",
-            "15M",
-            "30M",
-            "1H",
-            "4H",
-            "1D"
+            "5M", "15M", "30M", "1H", "4H", "1D"
     };
 
-    private final int BACKGROUND =
-            Color.rgb(7, 11, 18);
+    private final int BACKGROUND = Color.rgb(7, 11, 18);
+    private final int CARD = Color.rgb(15, 22, 33);
+    private final int CARD_BORDER = Color.rgb(35, 47, 64);
+    private final int WHITE = Color.rgb(245, 248, 252);
+    private final int MUTED = Color.rgb(145, 158, 175);
+    private final int GREEN = Color.rgb(40, 220, 125);
+    private final int RED = Color.rgb(255, 80, 90);
+    private final int YELLOW = Color.rgb(255, 195, 70);
+    private final int BLUE = Color.rgb(70, 150, 255);
 
-    private final int CARD =
-            Color.rgb(15, 22, 33);
-
-    private final int CARD_BORDER =
-            Color.rgb(35, 47, 64);
-
-    private final int WHITE =
-            Color.rgb(245, 248, 252);
-
-    private final int MUTED =
-            Color.rgb(145, 158, 175);
-
-    private final int GREEN =
-            Color.rgb(40, 220, 125);
-
-    private final int RED =
-            Color.rgb(255, 80, 90);
-
-    private final int YELLOW =
-            Color.rgb(255, 195, 70);
-
-    private final int BLUE =
-            Color.rgb(70, 150, 255);
-
-    private final Handler clockHandler =
-            new Handler();
-
-    private final Runnable clockRunnable =
-            new Runnable() {
-                @Override
-                public void run() {
-                    updateTimeAndSessions();
-
-                    clockHandler.postDelayed(
-                            this,
-                            1000
-                    );
-                }
-            };
+    private final Handler clockHandler = new Handler();
+    private final Runnable clockRunnable = new Runnable() {
+        @Override
+        public void run() {
+            updateTimeAndSessions();
+            clockHandler.postDelayed(this, 1000);
+        }
+    };
 
     @Override
-    protected void onCreate(
-            Bundle savedInstanceState
-    ) {
+    protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-
         buildDashboard();
-
         updateTimeAndSessions();
-
-        clockHandler.post(
-                clockRunnable
-        );
-
+        clockHandler.post(clockRunnable);
         connectToMarketData();
     }
 
-    // =============================================================
-    // DASHBOARD
-    // =============================================================
-
     private void buildDashboard() {
+        ScrollView scrollView = new ScrollView(this);
+        scrollView.setBackgroundColor(BACKGROUND);
 
-        ScrollView scrollView =
-                new ScrollView(this);
-
-        scrollView.setBackgroundColor(
-                BACKGROUND
-        );
-
-        LinearLayout root =
-                new LinearLayout(this);
-
-        root.setOrientation(
-                LinearLayout.VERTICAL
-        );
-
-        root.setPadding(
-                18,
-                24,
-                18,
-                32
-        );
-
+        LinearLayout root = new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setPadding(18, 24, 18, 32);
         scrollView.addView(root);
 
-        // =========================================================
-        // HEADER
-        // =========================================================
+        LinearLayout header = new LinearLayout(this);
+        header.setOrientation(LinearLayout.VERTICAL);
+        header.setGravity(Gravity.CENTER);
 
-        LinearLayout header =
-                new LinearLayout(this);
+        TextView title = createText("FOREXPILOT", 30, WHITE, true);
+        title.setGravity(Gravity.CENTER);
+        header.addView(title);
 
-        header.setOrientation(
-                LinearLayout.VERTICAL
-        );
+        TextView pro = createText(
+                "AI PRO  •  SIGNAL INTELLIGENCE", 12, BLUE, true);
+        pro.setGravity(Gravity.CENTER);
+        header.addView(pro, params(6));
 
-        header.setGravity(
-                Gravity.CENTER
-        );
+        connectionStatus = createText("●  CONNECTING", 13, YELLOW, true);
+        connectionStatus.setGravity(Gravity.CENTER);
+        header.addView(connectionStatus, params(14));
+        root.addView(header);
 
-        TextView title =
-                createText(
-                        "FOREXPILOT",
-                        30,
-                        WHITE,
-                        true
-                );
+        LinearLayout marketClockCard = createCard();
+        marketClockCard.addView(createSmallLabel("MARKET CLOCK"));
 
-        title.setGravity(
-                Gravity.CENTER
-        );
+        clockText = createText("--:--:-- SAST", 28, WHITE, true);
+        clockText.setGravity(Gravity.CENTER);
+        marketClockCard.addView(clockText, params(8));
 
-        header.addView(
-                title
-        );
+        dateText = createText("LOADING DATE", 12, MUTED, true);
+        dateText.setGravity(Gravity.CENTER);
+        marketClockCard.addView(dateText, params(4));
 
-        TextView pro =
-                createText(
-                        "AI PRO  •  SIGNAL INTELLIGENCE",
-                        12,
-                        BLUE,
-                        true
-                );
+        forexStatusText = createText(
+                "●  CHECKING FOREX MARKET", 17, YELLOW, true);
+        forexStatusText.setGravity(Gravity.CENTER);
+        marketClockCard.addView(forexStatusText, params(14));
 
-        pro.setGravity(
-                Gravity.CENTER
-        );
+        nextMarketText = createText(
+                "CHECKING MARKET HOURS...", 11, MUTED, false);
+        nextMarketText.setGravity(Gravity.CENTER);
+        marketClockCard.addView(nextMarketText, params(5));
+        root.addView(marketClockCard, params(18));
 
-        header.addView(
-                pro,
-                params(6)
-        );
+        LinearLayout sessionsCard = createCard();
+        sessionsCard.addView(createSmallLabel("FOREX SESSIONS • SAST"));
+        sessionsCard.addView(createText(
+                "Global session monitor", 11, MUTED, false), params(4));
 
-        connectionStatus =
-                createText(
-                        "●  CONNECTING",
-                        13,
-                        YELLOW,
-                        true
-                );
+        sydneySessionText = createSessionRow("SYDNEY");
+        tokyoSessionText = createSessionRow("TOKYO");
+        londonSessionText = createSessionRow("LONDON");
+        newYorkSessionText = createSessionRow("NEW YORK");
 
-        connectionStatus.setGravity(
-                Gravity.CENTER
-        );
+        sessionsCard.addView(sydneySessionText, params(10));
+        sessionsCard.addView(tokyoSessionText, params(6));
+        sessionsCard.addView(londonSessionText, params(6));
+        sessionsCard.addView(newYorkSessionText, params(6));
+        root.addView(sessionsCard, params(14));
 
-        header.addView(
-                connectionStatus,
-                params(14)
-        );
+        LinearLayout marketSelector = createCard();
+        marketSelector.addView(createSmallLabel("MARKET"));
 
-        root.addView(
-                header,
-                params(0)
-        );
-
-        // =========================================================
-        // MARKET CLOCK
-        // =========================================================
-
-        LinearLayout marketClockCard =
-                createCard();
-
-        marketClockCard.addView(
-                createSmallLabel(
-                        "MARKET CLOCK"
-                )
-        );
-
-        clockText =
-                createText(
-                        "--:--:-- SAST",
-                        28,
-                        WHITE,
-                        true
-                );
-
-        clockText.setGravity(
-                Gravity.CENTER
-        );
-
-        marketClockCard.addView(
-                clockText,
-                params(8)
-        );
-
-        dateText =
-                createText(
-                        "LOADING DATE",
-                        12,
-                        MUTED,
-                        true
-                );
-
-        dateText.setGravity(
-                Gravity.CENTER
-        );
-
-        marketClockCard.addView(
-                dateText,
-                params(4)
-        );
-
-        forexStatusText =
-                createText(
-                        "●  CHECKING FOREX MARKET",
-                        17,
-                        YELLOW,
-                        true
-                );
-
-        forexStatusText.setGravity(
-                Gravity.CENTER
-        );
-
-        marketClockCard.addView(
-                forexStatusText,
-                params(14)
-        );
-
-        nextMarketText =
-                createText(
-                        "CHECKING MARKET HOURS...",
-                        11,
-                        MUTED,
-                        false
-                );
-
-        nextMarketText.setGravity(
-                Gravity.CENTER
-        );
-
-        marketClockCard.addView(
-                nextMarketText,
-                params(5)
-        );
-
-        root.addView(
-                marketClockCard,
-                params(18)
-        );
-
-        // =========================================================
-        // FOREX SESSIONS
-        // =========================================================
-
-        LinearLayout sessionsCard =
-                createCard();
-
-        sessionsCard.addView(
-                createSmallLabel(
-                        "FOREX SESSIONS • SAST"
-                )
-        );
-
-        sessionsCard.addView(
-                createText(
-                        "Global session monitor",
-                        11,
-                        MUTED,
-                        false
-                ),
-                params(4)
-        );
-
-        sydneySessionText =
-                createSessionRow(
-                        "SYDNEY"
-                );
-
-        tokyoSessionText =
-                createSessionRow(
-                        "TOKYO"
-                );
-
-        londonSessionText =
-                createSessionRow(
-                        "LONDON"
-                );
-
-        newYorkSessionText =
-                createSessionRow(
-                        "NEW YORK"
-                );
-
-        sessionsCard.addView(
-                sydneySessionText,
-                params(10)
-        );
-
-        sessionsCard.addView(
-                tokyoSessionText,
-                params(6)
-        );
-
-        sessionsCard.addView(
-                londonSessionText,
-                params(6)
-        );
-
-        sessionsCard.addView(
-                newYorkSessionText,
-                params(6)
-        );
-
-        root.addView(
-                sessionsCard,
-                params(14)
-        );
-
-        // =========================================================
-        // MARKET SELECTOR
-        // =========================================================
-
-        LinearLayout marketSelector =
-                createCard();
-
-        marketSelector.addView(
-                createSmallLabel(
-                        "MARKET"
-                )
-        );
-
-        marketSpinner =
-                createSpinner(
-                        markets
-                );
-
+        marketSpinner = createSpinner(markets);
         marketSpinner.setSelection(1);
+        marketSelector.addView(marketSpinner, params(6));
 
-        marketSelector.addView(
-                marketSpinner,
-                params(6)
-        );
-
-        marketSelector.addView(
-                createSmallLabel(
-                        "TIMEFRAME"
-                ),
-                params(14)
-        );
-
-        timeframeSpinner =
-                createSpinner(
-                        timeframes
-                );
-
+        marketSelector.addView(createSmallLabel("TIMEFRAME"), params(14));
+        timeframeSpinner = createSpinner(timeframes);
         timeframeSpinner.setSelection(1);
+        marketSelector.addView(timeframeSpinner, params(6));
+        root.addView(marketSelector, params(14));
 
-        marketSelector.addView(
-                timeframeSpinner,
-                params(6)
-        );
+        LinearLayout priceCard = createCard();
+        priceCard.addView(createSmallLabel("LIVE MARKET"));
 
-        root.addView(
-                marketSelector,
-                params(14)
-        );
+        marketName = createText(selectedMarket, 24, WHITE, true);
+        marketName.setGravity(Gravity.CENTER);
+        priceCard.addView(marketName, params(8));
 
-        // =========================================================
-        // LIVE MARKET
-        // =========================================================
+        priceText = createText("PRICE  --", 19, BLUE, true);
+        priceText.setGravity(Gravity.CENTER);
+        priceCard.addView(priceText, params(5));
+        root.addView(priceCard, params(14));
 
-        LinearLayout priceCard =
-                createCard();
+        LinearLayout signalCard = createCard();
+        signalCard.addView(createSmallLabel("AI SIGNAL"));
 
-        priceCard.addView(
-                createSmallLabel(
-                        "LIVE MARKET"
-                )
-        );
+        signalText = createText("WAIT", 38, YELLOW, true);
+        signalText.setGravity(Gravity.CENTER);
+        signalCard.addView(signalText, params(8));
 
-        marketName =
-                createText(
-                        selectedMarket,
-                        24,
-                        WHITE,
-                        true
-                );
+        TextView signalDescription = createText(
+                "Technical market analysis • MTF confirmation required",
+                12, MUTED, false);
+        signalDescription.setGravity(Gravity.CENTER);
+        signalCard.addView(signalDescription, params(3));
+        root.addView(signalCard, params(14));
 
-        marketName.setGravity(
-                Gravity.CENTER
-        );
+        LinearLayout indicatorsCard = createCard();
+        indicatorsCard.addView(createSmallLabel("MARKET ANALYSIS"));
 
-        priceCard.addView(
-                marketName,
-                params(8)
-        );
+        LinearLayout row1 = createMetricRow();
+        trendText = createMetric("TREND", "--");
+        rsiText = createMetric("RSI", "--");
+        row1.addView(trendText, weightParams());
+        row1.addView(rsiText, weightParams());
+        indicatorsCard.addView(row1, params(10));
 
-        priceText =
-                createText(
-                        "PRICE  --",
-                        19,
-                        BLUE,
-                        true
-                );
+        LinearLayout row2 = createMetricRow();
+        atrText = createMetric("ATR", "--");
+        momentumText = createMetric("TIMEFRAME", selectedTimeframe);
+        row2.addView(atrText, weightParams());
+        row2.addView(momentumText, weightParams());
+        indicatorsCard.addView(row2, params(8));
+        root.addView(indicatorsCard, params(14));
 
-        priceText.setGravity(
-                Gravity.CENTER
-        );
+        // PRICE CHART
+        LinearLayout chartCard = createCard();
+        TextView chartTitle = createText("PRICE CHART", 16, WHITE, true);
+        chartTitle.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        chartCard.addView(chartTitle);
 
-        priceCard.addView(
-                priceText,
-                params(5)
-        );
+        chartStyleButton = new Button(this);
+        updateChartStyleButtonText();
+        chartStyleButton.setTextSize(13);
+        chartStyleButton.setTextColor(WHITE);
+        chartStyleButton.setAllCaps(false);
+        chartStyleButton.setOnClickListener(v -> toggleChartStyle());
 
-        root.addView(
-                priceCard,
-                params(14)
-        );
+        GradientDrawable chartButtonBackground = new GradientDrawable();
+        chartButtonBackground.setColor(Color.rgb(25, 95, 180));
+        chartButtonBackground.setCornerRadius(12);
+        chartStyleButton.setBackground(chartButtonBackground);
+        chartCard.addView(chartStyleButton, params(8));
 
-        // =========================================================
-        // AI SIGNAL
-        // =========================================================
+        forexChartView = new ForexChartView(this);
+        forexChartView.setLineChartMode(lineChartMode);
 
-        LinearLayout signalCard =
-                createCard();
+        int chartHeightDp =
+                getResources().getConfiguration().orientation
+                        == Configuration.ORIENTATION_LANDSCAPE ? 320 : 480;
+        float density = getResources().getDisplayMetrics().density;
+        int chartHeightPx = (int) (chartHeightDp * density + 0.5f);
 
-        signalCard.addView(
-                createSmallLabel(
-                        "AI SIGNAL"
-                )
-        );
-
-        signalText =
-                createText(
-                        "WAIT",
-                        38,
-                        YELLOW,
-                        true
-                );
-
-        signalText.setGravity(
-                Gravity.CENTER
-        );
-
-        signalCard.addView(
-                signalText,
-                params(8)
-        );
-
-        TextView signalDescription =
-                createText(
-                        "Technical market analysis • MTF confirmation required",
-                        12,
-                        MUTED,
-                        false
-                );
-
-        signalDescription.setGravity(
-                Gravity.CENTER
-        );
-
-        signalCard.addView(
-                signalDescription,
-                params(3)
-        );
-
-        root.addView(
-                signalCard,
-                params(14)
-        );
-
-        // =========================================================
-        // MARKET ANALYSIS
-        // =========================================================
-
-        LinearLayout indicatorsCard =
-                createCard();
-
-        indicatorsCard.addView(
-                createSmallLabel(
-                        "MARKET ANALYSIS"
-                )
-        );
-
-        LinearLayout row1 =
-                createMetricRow();
-
-        trendText =
-                createMetric(
-                        "TREND",
-                        "--"
-                );
-
-        rsiText =
-                createMetric(
-                        "RSI",
-                        "--"
-                );
-
-        row1.addView(
-                trendText,
-                weightParams()
-        );
-
-        row1.addView(
-                rsiText,
-                weightParams()
-        );
-
-        indicatorsCard.addView(
-                row1,
-                params(10)
-        );
-
-        LinearLayout row2 =
-                createMetricRow();
-
-        atrText =
-                createMetric(
-                        "ATR",
-                        "--"
-                );
-
-        momentumText =
-                createMetric(
-                        "TIMEFRAME",
-                        selectedTimeframe
-                );
-
-        row2.addView(
-                atrText,
-                weightParams()
-        );
-
-        row2.addView(
-                momentumText,
-                weightParams()
-        );
-
-        indicatorsCard.addView(
-                row2,
-                params(8)
-        );
-
-        root.addView(
-                indicatorsCard,
-                params(14)
-        );
-
-        // =========================================================
-        // ADVANCED PRICE CHART
-        // =========================================================
-
-        LinearLayout chartCard =
-                createCard();
-
-        TextView chartTitle =
-                createText(
-                        "PRICE CHART",
-                        16,
-                        WHITE,
-                        true
-                );
-
-        chartTitle.setTypeface(
-                Typeface.DEFAULT,
-                Typeface.BOLD
-        );
-
-        chartCard.addView(
-                chartTitle,
-                params(0)
-        );
-
-        forexChartView =
-                new ForexChartView(this);
-
-        int chartHeightDp;
-
-        if (getResources().getConfiguration().orientation
-                == Configuration.ORIENTATION_LANDSCAPE) {
-
-            chartHeightDp = 320;
-
-        } else {
-
-            chartHeightDp = 480;
-        }
-
-        float density =
-                getResources().getDisplayMetrics().density;
-
-        int chartHeightPx =
-                (int) (
-                        chartHeightDp * density
-                                + 0.5f
-                );
-
-        chartCard.addView(
-                forexChartView,
+        chartCard.addView(forexChartView,
                 new LinearLayout.LayoutParams(
                         LinearLayout.LayoutParams.MATCH_PARENT,
-                        chartHeightPx
-                )
-        );
+                        chartHeightPx));
+        root.addView(chartCard, params(14));
 
-        root.addView(
-                chartCard,
-                params(14)
-        );
-
-        // =========================================================
         // TRADE PLAN
-        // =========================================================
+        LinearLayout tradeCard = createCard();
+        tradeCard.addView(createSmallLabel("TRADE PLAN"));
 
-        LinearLayout tradeCard =
-                createCard();
+        entryText = createTradeRow("ENTRY", BLUE);
+        stopLossText = createTradeRow("STOP LOSS", RED);
+        tp1Text = createTradeRow("TAKE PROFIT 1", GREEN);
+        tp2Text = createTradeRow("TAKE PROFIT 2", GREEN);
+        tp3Text = createTradeRow("TAKE PROFIT 3", GREEN);
 
-        tradeCard.addView(
-                createSmallLabel(
-                        "TRADE PLAN"
-                )
-        );
+        tradeCard.addView(entryText, params(10));
+        tradeCard.addView(stopLossText, params(5));
+        tradeCard.addView(tp1Text, params(5));
+        tradeCard.addView(tp2Text, params(5));
+        tradeCard.addView(tp3Text, params(5));
+        root.addView(tradeCard, params(14));
 
-        entryText =
-                createTradeRow(
-                        "ENTRY",
-                        BLUE
-                );
+        // MULTI-TIMEFRAME CONFIRMATION
+        LinearLayout mtfCard = createCard();
+        mtfCard.addView(createSmallLabel("MULTI-TIMEFRAME CONFIRMATION"));
 
-        stopLossText =
-                createTradeRow(
-                        "STOP LOSS",
-                        RED
-                );
+        HorizontalScrollView horizontal = new HorizontalScrollView(this);
+        horizontal.setHorizontalScrollBarEnabled(false);
 
-        tp1Text =
-                createTradeRow(
-                        "TAKE PROFIT 1",
-                        GREEN
-                );
+        LinearLayout timeframeRow = new LinearLayout(this);
+        timeframeRow.setOrientation(LinearLayout.HORIZONTAL);
 
-        tp2Text =
-                createTradeRow(
-                        "TAKE PROFIT 2",
-                        GREEN
-                );
+        mtf5mText = createTimeframeBox("5M\nWAIT");
+        mtf15mText = createTimeframeBox("15M\nWAIT");
+        mtf30mText = createTimeframeBox("30M\nWAIT");
+        mtf1hText = createTimeframeBox("1H\nWAIT");
+        mtf4hText = createTimeframeBox("4H\nWAIT");
+        mtf1dText = createTimeframeBox("1D\nWAIT");
 
-        tp3Text =
-                createTradeRow(
-                        "TAKE PROFIT 3",
-                        GREEN
-                );
+        timeframeRow.addView(mtf5mText);
+        timeframeRow.addView(mtf15mText);
+        timeframeRow.addView(mtf30mText);
+        timeframeRow.addView(mtf1hText);
+        timeframeRow.addView(mtf4hText);
+        timeframeRow.addView(mtf1dText);
+        horizontal.addView(timeframeRow);
+        mtfCard.addView(horizontal, params(10));
 
-        tradeCard.addView(
-                entryText,
-                params(10)
-        );
+        mtfConfluenceText = createText(
+                "MTF CONFLUENCE • WAIT", 13, YELLOW, true);
+        mtfConfluenceText.setGravity(Gravity.CENTER);
+        mtfCard.addView(mtfConfluenceText, params(12));
+        root.addView(mtfCard, params(14));
 
-        tradeCard.addView(
-                stopLossText,
-                params(5)
-        );
+        scanButton = new Button(this);
+        scanButton.setText("SCAN MARKET");
+        scanButton.setTextSize(15);
+        scanButton.setTextColor(WHITE);
+        scanButton.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        scanButton.setAllCaps(false);
+        scanButton.setPadding(20, 15, 20, 15);
 
-        tradeCard.addView(
-                tp1Text,
-                params(5)
-        );
+        GradientDrawable buttonBackground = new GradientDrawable();
+        buttonBackground.setColor(Color.rgb(25, 95, 180));
+        buttonBackground.setCornerRadius(18);
+        scanButton.setBackground(buttonBackground);
+        scanButton.setOnClickListener(v -> requestCurrentSignal());
+        root.addView(scanButton, params(18));
 
-        tradeCard.addView(
-                tp2Text,
-                params(5)
-        );
-
-        tradeCard.addView(
-                tp3Text,
-                params(5)
-        );
-
-        root.addView(
-                tradeCard,
-                params(14)
-        );
-
-        // =========================================================
-        // MULTI-TIMEFRAME
-        // =========================================================
-
-        LinearLayout mtfCard =
-                createCard();
-
-        mtfCard.addView(
-                createSmallLabel(
-                        "MULTI-TIMEFRAME CONFIRMATION"
-                )
-        );
-
-        HorizontalScrollView horizontal =
-                new HorizontalScrollView(
-                        this
-                );
-
-        horizontal.setHorizontalScrollBarEnabled(
-                false
-        );
-
-        LinearLayout timeframeRow =
-                new LinearLayout(this);
-
-        timeframeRow.setOrientation(
-                LinearLayout.HORIZONTAL
-        );
-
-        mtf5mText =
-                createTimeframeBox(
-                        "5M\nWAIT"
-                );
-
-        mtf15mText =
-                createTimeframeBox(
-                        "15M\nWAIT"
-                );
-
-        mtf30mText =
-                createTimeframeBox(
-                        "30M\nWAIT"
-                );
-
-        mtf1hText =
-                createTimeframeBox(
-                        "1H\nWAIT"
-                );
-
-        mtf4hText =
-                createTimeframeBox(
-                        "4H\nWAIT"
-                );
-
-        mtf1dText =
-                createTimeframeBox(
-                        "1D\nWAIT"
-                );
-
-        timeframeRow.addView(
-                mtf5mText
-        );
-
-        timeframeRow.addView(
-                mtf15mText
-        );
-
-        timeframeRow.addView(
-                mtf30mText
-        );
-
-        timeframeRow.addView(
-                mtf1hText
-        );
-
-        timeframeRow.addView(
-                mtf4hText
-        );
-
-        timeframeRow.addView(
-                mtf1dText
-        );
-
-        horizontal.addView(
-                timeframeRow
-        );
-
-        mtfCard.addView(
-                horizontal,
-                params(10)
-        );
-
-        mtfConfluenceText =
-                createText(
-                        "MTF CONFLUENCE • WAIT",
-                        13,
-                        YELLOW,
-                        true
-                );
-
-        mtfConfluenceText.setGravity(
-                Gravity.CENTER
-        );
-
-        mtfCard.addView(
-                mtfConfluenceText,
-                params(12)
-        );
-
-        root.addView(
-                mtfCard,
-                params(14)
-        );
-
-        // =========================================================
-        // SCAN BUTTON
-        // =========================================================
-
-        scanButton =
-                new Button(this);
-
-        scanButton.setText(
-                "SCAN MARKET"
-        );
-
-        scanButton.setTextSize(
-                15
-        );
-
-        scanButton.setTextColor(
-                WHITE
-        );
-
-        scanButton.setTypeface(
-                Typeface.DEFAULT,
-                Typeface.BOLD
-        );
-
-        scanButton.setAllCaps(
-                false
-        );
-
-        scanButton.setPadding(
-                20,
-                15,
-                20,
-                15
-        );
-
-        GradientDrawable buttonBackground =
-                new GradientDrawable();
-
-        buttonBackground.setColor(
-                Color.rgb(25, 95, 180)
-        );
-
-        buttonBackground.setCornerRadius(
-                18
-        );
-
-        scanButton.setBackground(
-                buttonBackground
-        );
-
-        scanButton.setOnClickListener(
-                view -> requestCurrentSignal()
-        );
-
-        root.addView(
-                scanButton,
-                params(18)
-        );
-
-        // =========================================================
-        // FOOTER
-        // =========================================================
-
-        TextView footer =
-                createText(
-                        "FOREXPILOT AI PRO\nLIVE DATA • MTF ANALYSIS • REAL-TIME SIGNALS",
-                        10,
-                        MUTED,
-                        false
-                );
-
-        footer.setGravity(
-                Gravity.CENTER
-        );
-
-        root.addView(
-                footer,
-                params(18)
-        );
-
-        // =========================================================
-        // MARKET SELECTION
-        // =========================================================
+        TextView footer = createText(
+                "FOREXPILOT AI PRO\nLIVE DATA • MTF ANALYSIS • REAL-TIME SIGNALS",
+                10, MUTED, false);
+        footer.setGravity(Gravity.CENTER);
+        root.addView(footer, params(18));
 
         marketSpinner.setOnItemSelectedListener(
                 new AdapterView.OnItemSelectedListener() {
-
                     @Override
-                    public void onItemSelected(
-                            AdapterView<?> parent,
-                            View view,
-                            int position,
-                            long id
-                    ) {
-
-                        selectedMarket =
-                                markets[position];
-
+                    public void onItemSelected(AdapterView<?> parent,
+                                               View view, int position, long id) {
+                        selectedMarket = markets[position];
                         if (marketName != null) {
-                            marketName.setText(
-                                    selectedMarket
-                            );
+                            marketName.setText(selectedMarket);
                         }
-
                         resetForNewSelection();
                     }
 
                     @Override
-                    public void onNothingSelected(
-                            AdapterView<?> parent
-                    ) {
-                    }
-                }
-        );
-
-        // =========================================================
-        // TIMEFRAME SELECTION
-        // =========================================================
+                    public void onNothingSelected(AdapterView<?> parent) { }
+                });
 
         timeframeSpinner.setOnItemSelectedListener(
                 new AdapterView.OnItemSelectedListener() {
-
                     @Override
-                    public void onItemSelected(
-                            AdapterView<?> parent,
-                            View view,
-                            int position,
-                            long id
-                    ) {
-
-                        selectedTimeframe =
-                                timeframes[position];
-
+                    public void onItemSelected(AdapterView<?> parent,
+                                               View view, int position, long id) {
+                        selectedTimeframe = timeframes[position];
                         if (momentumText != null) {
-                            momentumText.setText(
-                                    "TIMEFRAME\n"
-                                            + selectedTimeframe
-                            );
+                            momentumText.setText("TIMEFRAME\n" + selectedTimeframe);
                         }
-
                         resetForNewSelection();
                     }
 
                     @Override
-                    public void onNothingSelected(
-                            AdapterView<?> parent
-                    ) {
-                    }
-                }
-        );
+                    public void onNothingSelected(AdapterView<?> parent) { }
+                });
 
-        setContentView(
-                scrollView
-        );
+        setContentView(scrollView);
     }
 
-    // =============================================================
-    // RESET AFTER MARKET/TIMEFRAME CHANGE
-    // =============================================================
+    // Chart mode toggle
+    private void toggleChartStyle() {
+        lineChartMode = !lineChartMode;
+        if (forexChartView != null) {
+            forexChartView.setLineChartMode(lineChartMode);
+        }
+        updateChartStyleButtonText();
+    }
+
+    private void updateChartStyleButtonText() {
+        if (chartStyleButton != null) {
+            chartStyleButton.setText(
+                    lineChartMode
+                            ? "CHART STYLE: LINE  •  SWITCH TO CANDLES"
+                            : "CHART STYLE: CANDLES  •  SWITCH TO LINE");
+        }
+    }
 
     private void resetForNewSelection() {
-
         mtfScanning = false;
         pendingPrimarySignal = null;
-
         mtfResults.clear();
         mtfRequestIndex = 0;
 
@@ -1074,2317 +390,777 @@ public class MainActivity extends Activity {
         clearTradeLevels();
 
         if (signalText != null) {
-            signalText.setText(
-                    "WAIT"
-            );
-
-            signalText.setTextColor(
-                    YELLOW
-            );
+            signalText.setText("WAIT");
+            signalText.setTextColor(YELLOW);
         }
-
-        if (priceText != null) {
-            priceText.setText(
-                    "PRICE  --"
-            );
-        }
-
-        if (trendText != null) {
-            trendText.setText(
-                    "TREND\n--"
-            );
-        }
-
-        if (rsiText != null) {
-            rsiText.setText(
-                    "RSI\n--"
-            );
-        }
-
-        if (atrText != null) {
-            atrText.setText(
-                    "ATR\n--"
-            );
-        }
-
+        if (priceText != null) priceText.setText("PRICE  --");
+        if (trendText != null) trendText.setText("TREND\n--");
+        if (rsiText != null) rsiText.setText("RSI\n--");
+        if (atrText != null) atrText.setText("ATR\n--");
         if (momentumText != null) {
-            momentumText.setText(
-                    "TIMEFRAME\n"
-                            + selectedTimeframe
-            );
+            momentumText.setText("TIMEFRAME\n" + selectedTimeframe);
         }
-
         if (connectionStatus != null) {
-            connectionStatus.setText(
-                    "●  LOADING HISTORICAL DATA • "
-                            + selectedMarket
-                            + " • "
-                            + selectedTimeframe
-            );
-
-            connectionStatus.setTextColor(
-                    YELLOW
-            );
+            connectionStatus.setText("●  LOADING HISTORICAL DATA • "
+                    + selectedMarket + " • " + selectedTimeframe);
+            connectionStatus.setTextColor(YELLOW);
         }
-
         if (forexChartView != null) {
             forexChartView.clearChart();
             forexChartView.clearTradeLevels();
+            forexChartView.setLineChartMode(lineChartMode);
         }
-
-        if (rsiChartView != null) {
-            rsiChartView.clearRsi();
-        }
-
-        if (tradeLevelView != null) {
-            tradeLevelView.clearSignal();
-        }
-
-        if (signalBadgeView != null) {
-            signalBadgeView.clearSignal();
-        }
-
-        if (multiTimeframeView != null) {
-            multiTimeframeView.clearResults();
-        }
+        if (rsiChartView != null) rsiChartView.clearRsi();
+        if (tradeLevelView != null) tradeLevelView.clearSignal();
+        if (signalBadgeView != null) signalBadgeView.clearSignal();
+        if (multiTimeframeView != null) multiTimeframeView.clearResults();
 
         requestChartCandles();
     }
 
-    // =============================================================
-    // CLOCK + FOREX STATUS + SESSIONS
-    // =============================================================
-
     private void updateTimeAndSessions() {
-
-        Calendar now =
-                Calendar.getInstance();
+        Calendar now = Calendar.getInstance();
 
         SimpleDateFormat timeFormat =
-                new SimpleDateFormat(
-                        "HH:mm:ss",
-                        Locale.ENGLISH
-                );
-
-        timeFormat.setTimeZone(
-                TimeZone.getTimeZone(
-                        "Africa/Johannesburg"
-                )
-        );
+                new SimpleDateFormat("HH:mm:ss", Locale.ENGLISH);
+        timeFormat.setTimeZone(TimeZone.getTimeZone("Africa/Johannesburg"));
 
         SimpleDateFormat dateFormat =
-                new SimpleDateFormat(
-                        "EEEE • dd MMMM yyyy",
-                        Locale.ENGLISH
-                );
-
-        dateFormat.setTimeZone(
-                TimeZone.getTimeZone(
-                        "Africa/Johannesburg"
-                )
-        );
+                new SimpleDateFormat("EEEE • dd MMMM yyyy", Locale.ENGLISH);
+        dateFormat.setTimeZone(TimeZone.getTimeZone("Africa/Johannesburg"));
 
         if (clockText != null) {
-
-            clockText.setText(
-                    timeFormat.format(
-                            now.getTime()
-                    )
-                            + " SAST"
-            );
+            clockText.setText(timeFormat.format(now.getTime()) + " SAST");
         }
-
         if (dateText != null) {
-
-            dateText.setText(
-                    dateFormat.format(
-                            now.getTime()
-                    ).toUpperCase(
-                            Locale.ENGLISH
-                    )
-            );
+            dateText.setText(dateFormat.format(now.getTime())
+                    .toUpperCase(Locale.ENGLISH));
         }
 
-        boolean forexOpen =
-                isForexMarketOpen(
-                        now.getTime()
-                );
+        boolean forexOpen = isForexMarketOpen(now.getTime());
 
         if (forexStatusText != null) {
-
-            if (forexOpen) {
-
-                forexStatusText.setText(
-                        "●  FOREX MARKET OPEN"
-                );
-
-                forexStatusText.setTextColor(
-                        GREEN
-                );
-
-            } else {
-
-                forexStatusText.setText(
-                        "●  FOREX MARKET CLOSED"
-                );
-
-                forexStatusText.setTextColor(
-                        RED
-                );
-            }
+            forexStatusText.setText(forexOpen
+                    ? "●  FOREX MARKET OPEN"
+                    : "●  FOREX MARKET CLOSED");
+            forexStatusText.setTextColor(forexOpen ? GREEN : RED);
         }
 
         if (nextMarketText != null) {
-
             if (forexOpen) {
-
-                nextMarketText.setText(
-                        mtfScanning
-                                ? "SIGNAL SCANNER • MTF ANALYSIS"
-                                : "SIGNAL SCANNER • ACTIVE"
-                );
-
-                nextMarketText.setTextColor(
-                        GREEN
-                );
-
+                nextMarketText.setText(mtfScanning
+                        ? "SIGNAL SCANNER • MTF ANALYSIS"
+                        : "SIGNAL SCANNER • ACTIVE");
+                nextMarketText.setTextColor(GREEN);
             } else {
-
                 nextMarketText.setText(
-                        "MARKET CLOSED • HISTORICAL DATA AVAILABLE"
-                );
-
-                nextMarketText.setTextColor(
-                        MUTED
-                );
+                        "MARKET CLOSED • HISTORICAL DATA AVAILABLE");
+                nextMarketText.setTextColor(MUTED);
             }
         }
 
         if (scanButton != null) {
-
-            scanButton.setEnabled(
-                    forexOpen && !mtfScanning
-            );
-
-            scanButton.setAlpha(
-                    forexOpen
-                            ? 1.0f
-                            : 0.45f
-            );
+            scanButton.setEnabled(forexOpen && !mtfScanning);
+            scanButton.setAlpha(forexOpen ? 1.0f : 0.45f);
         }
 
-        if (forexOpen
-                && !lastForexOpen
-                && signalRepository != null) {
-
+        if (forexOpen && !lastForexOpen && signalRepository != null) {
             requestCurrentSignal();
         }
+        lastForexOpen = forexOpen;
 
-        lastForexOpen =
-                forexOpen;
-
-        updateSession(
-                sydneySessionText,
-                "SYDNEY",
-                "Australia/Sydney",
-                8,
-                17
-        );
-
-        updateSession(
-                tokyoSessionText,
-                "TOKYO",
-                "Asia/Tokyo",
-                9,
-                18
-        );
-
-        updateSession(
-                londonSessionText,
-                "LONDON",
-                "Europe/London",
-                8,
-                17
-        );
-
-        updateSession(
-                newYorkSessionText,
-                "NEW YORK",
-                "America/New_York",
-                8,
-                17
-        );
+        updateSession(sydneySessionText, "SYDNEY",
+                "Australia/Sydney", 8, 17);
+        updateSession(tokyoSessionText, "TOKYO",
+                "Asia/Tokyo", 9, 18);
+        updateSession(londonSessionText, "LONDON",
+                "Europe/London", 8, 17);
+        updateSession(newYorkSessionText, "NEW YORK",
+                "America/New_York", 8, 17);
     }
 
     private void showMarketClosedState() {
-
         mtfScanning = false;
         pendingPrimarySignal = null;
         mtfResults.clear();
 
         if (signalText != null) {
-
-            signalText.setText(
-                    "WAIT"
-            );
-
-            signalText.setTextColor(
-                    YELLOW
-            );
+            signalText.setText("WAIT");
+            signalText.setTextColor(YELLOW);
         }
-
         if (connectionStatus != null) {
-
             connectionStatus.setText(
-                    "●  MARKET CLOSED • HISTORICAL DATA LOADED"
-            );
-
-            connectionStatus.setTextColor(
-                    MUTED
-            );
+                    "●  MARKET CLOSED • HISTORICAL DATA LOADED");
+            connectionStatus.setTextColor(MUTED);
         }
-
-        if (trendText != null) {
-            trendText.setText(
-                    "TREND\nHISTORICAL"
-            );
-        }
-
+        if (trendText != null) trendText.setText("TREND\nHISTORICAL");
         clearTradeLevels();
         resetMtfDisplay();
     }
 
-    private boolean isForexMarketOpen(
-            Date date
-    ) {
+    private boolean isForexMarketOpen(Date date) {
+        Calendar newYork = Calendar.getInstance(
+                TimeZone.getTimeZone("America/New_York"), Locale.ENGLISH);
+        newYork.setTime(date);
 
-        Calendar newYork =
-                Calendar.getInstance(
-                        TimeZone.getTimeZone(
-                                "America/New_York"
-                        ),
-                        Locale.ENGLISH
-                );
+        int day = newYork.get(Calendar.DAY_OF_WEEK);
+        int totalMinutes = newYork.get(Calendar.HOUR_OF_DAY) * 60
+                + newYork.get(Calendar.MINUTE);
 
-        newYork.setTime(
-                date
-        );
-
-        int day =
-                newYork.get(
-                        Calendar.DAY_OF_WEEK
-                );
-
-        int hour =
-                newYork.get(
-                        Calendar.HOUR_OF_DAY
-                );
-
-        int minute =
-                newYork.get(
-                        Calendar.MINUTE
-                );
-
-        int totalMinutes =
-                (hour * 60) + minute;
-
-        if (day == Calendar.SATURDAY) {
-            return false;
-        }
-
-        if (day == Calendar.SUNDAY) {
-            return totalMinutes >= 17 * 60;
-        }
-
-        if (day == Calendar.FRIDAY) {
-            return totalMinutes < 17 * 60;
-        }
-
+        if (day == Calendar.SATURDAY) return false;
+        if (day == Calendar.SUNDAY) return totalMinutes >= 17 * 60;
+        if (day == Calendar.FRIDAY) return totalMinutes < 17 * 60;
         return true;
     }
 
-    private void updateSession(
-            TextView view,
-            String name,
-            String timeZoneId,
-            int openHour,
-            int closeHour
-    ) {
+    private void updateSession(TextView view, String name, String timeZoneId,
+                               int openHour, int closeHour) {
+        if (view == null) return;
 
-        if (view == null) {
-            return;
-        }
+        Calendar local = Calendar.getInstance(
+                TimeZone.getTimeZone(timeZoneId), Locale.ENGLISH);
+        Date now = new Date();
+        local.setTime(now);
 
-        Calendar local =
-                Calendar.getInstance(
-                        TimeZone.getTimeZone(
-                                timeZoneId
-                        ),
-                        Locale.ENGLISH
-                );
+        int day = local.get(Calendar.DAY_OF_WEEK);
+        int hour = local.get(Calendar.HOUR_OF_DAY);
+        int minute = local.get(Calendar.MINUTE);
+        boolean weekend = day == Calendar.SATURDAY || day == Calendar.SUNDAY;
+        int totalMinutes = hour * 60 + minute;
+        boolean open = !weekend && totalMinutes >= openHour * 60
+                && totalMinutes < closeHour * 60;
 
-        Date now =
-                new Date();
+        SimpleDateFormat localFormat =
+                new SimpleDateFormat("HH:mm", Locale.ENGLISH);
+        localFormat.setTimeZone(TimeZone.getTimeZone(timeZoneId));
 
-        local.setTime(
-                now
-        );
+        SimpleDateFormat sastFormat =
+                new SimpleDateFormat("HH:mm", Locale.ENGLISH);
+        sastFormat.setTimeZone(
+                TimeZone.getTimeZone("Africa/Johannesburg"));
 
-        int day =
-                local.get(
-                        Calendar.DAY_OF_WEEK
-                );
+        String localTime = localFormat.format(now);
+        String sastTime = sastFormat.format(now);
 
-        int hour =
-                local.get(
-                        Calendar.HOUR_OF_DAY
-                );
-
-        int minute =
-                local.get(
-                        Calendar.MINUTE
-                );
-
-        boolean weekend =
-                day == Calendar.SATURDAY
-                        || day == Calendar.SUNDAY;
-
-        int totalMinutes =
-                (hour * 60) + minute;
-
-        boolean open =
-                !weekend
-                        && totalMinutes >= openHour * 60
-                        && totalMinutes < closeHour * 60;
-
-        SimpleDateFormat localTimeFormat =
-                new SimpleDateFormat(
-                        "HH:mm",
-                        Locale.ENGLISH
-                );
-
-        localTimeFormat.setTimeZone(
-                TimeZone.getTimeZone(
-                        timeZoneId
-                )
-        );
-
-        SimpleDateFormat sastTimeFormat =
-                new SimpleDateFormat(
-                        "HH:mm",
-                        Locale.ENGLISH
-                );
-
-        sastTimeFormat.setTimeZone(
-                TimeZone.getTimeZone(
-                        "Africa/Johannesburg"
-                )
-        );
-
-        String localTime =
-                localTimeFormat.format(
-                        now
-                );
-
-        String sastTime =
-                sastTimeFormat.format(
-                        now
-                );
-
-        if (open) {
-
-            view.setText(
-                    "●  "
-                            + name
-                            + "     OPEN"
-                            + "\n"
-                            + "    Local "
-                            + localTime
-                            + "     •     SAST "
-                            + sastTime
-            );
-
-            view.setTextColor(
-                    GREEN
-            );
-
-        } else {
-
-            view.setText(
-                    "●  "
-                            + name
-                            + "     CLOSED"
-                            + "\n"
-                            + "    Local "
-                            + localTime
-                            + "     •     SAST "
-                            + sastTime
-            );
-
-            view.setTextColor(
-                    MUTED
-            );
-        }
+        view.setText("●  " + name + "     " + (open ? "OPEN" : "CLOSED")
+                + "\n    Local " + localTime + "     •     SAST " + sastTime);
+        view.setTextColor(open ? GREEN : MUTED);
     }
 
-    // =============================================================
-    // DATA CONNECTION
-    // =============================================================
-
     private void connectToMarketData() {
+        String apiKey = AppConfig.getTwelveDataApiKey();
+        marketDataProvider = new TwelveDataProvider(apiKey);
 
-        String apiKey =
-                AppConfig.getTwelveDataApiKey();
+        signalRepository = new SignalRepository(
+                marketDataProvider, new SignalRepository.SignalCallback() {
+            @Override
+            public void onCandles(String symbol, String timeframe,
+                                  List<Candle> candles) {
+                runOnUiThread(() -> {
+                    if (forexChartView == null
+                            || !selectedMarket.equals(symbol)
+                            || !selectedTimeframe.equals(timeframe)
+                            || candles == null || candles.isEmpty()) return;
 
-        marketDataProvider =
-                new TwelveDataProvider(
-                        apiKey
-                );
+                    forexChartView.setCandles(candles);
+                    forexChartView.setLineChartMode(lineChartMode);
+                    updateIndicatorDashboard(symbol, candles);
+                });
+            }
 
-        signalRepository =
-                new SignalRepository(
-                        marketDataProvider,
-                        new SignalRepository.SignalCallback() {
+            @Override
+            public void onSignal(Signal signal) {
+                runOnUiThread(() -> {
+                    if (signal == null) return;
 
-                            @Override
-                            public void onCandles(
-                                    String symbol,
-                                    String timeframe,
-                                    List<Candle> candles
-                            ) {
+                    if (!isForexMarketOpen(new Date())) {
+                        updatePrimaryDashboard(signal);
+                        connectionStatus.setText(
+                                "●  HISTORICAL SIGNAL DATA • MARKET CLOSED");
+                        connectionStatus.setTextColor(MUTED);
+                        return;
+                    }
 
-                                runOnUiThread(
-                                        () -> {
+                    pendingPrimarySignal = signal;
+                    updatePrimaryDashboard(signal);
+                    requestMultiTimeframeAnalysis(signal.getSymbol());
+                });
+            }
 
-                                            if (forexChartView == null) {
-                                                return;
-                                            }
+            @Override
+            public void onError(String message) {
+                runOnUiThread(() -> {
+                    mtfScanning = false;
+                    connectionStatus.setText(
+                            "●  DATA ERROR • " + selectedMarket);
+                    connectionStatus.setTextColor(RED);
+                    signalText.setText("WAIT");
+                    signalText.setTextColor(YELLOW);
 
-                                            if (!selectedMarket.equals(
-                                                    symbol
-                                            )) {
-                                                return;
-                                            }
-
-                                            if (!selectedTimeframe.equals(
-                                                    timeframe
-                                            )) {
-                                                return;
-                                            }
-
-                                            if (candles == null
-                                                    || candles.isEmpty()) {
-                                                return;
-                                            }
-
-                                            /*
-                                             * These are the exact candles
-                                             * that SignalEngine uses.
-                                             *
-                                             * This keeps the chart and the
-                                             * real ForexPilot signal data
-                                             * synchronized.
-                                             */
-                                            forexChartView.setCandles(
-                                                    candles
-                                            );
-
-                                            updateIndicatorDashboard(
-                                                    symbol,
-                                                    candles
-                                            );
-                                        }
-                                );
-                            }
-
-                            @Override
-                            public void onSignal(
-                                    Signal signal
-                            ) {
-
-                                runOnUiThread(
-                                        () -> {
-
-                                            if (signal == null) {
-                                                return;
-                                            }
-
-                                            if (!isForexMarketOpen(
-                                                    new Date()
-                                            )) {
-
-                                                updatePrimaryDashboard(
-                                                        signal
-                                                );
-
-                                                connectionStatus.setText(
-                                                        "●  HISTORICAL SIGNAL DATA • MARKET CLOSED"
-                                                );
-
-                                                connectionStatus.setTextColor(
-                                                        MUTED
-                                                );
-
-                                                return;
-                                            }
-
-                                            pendingPrimarySignal =
-                                                    signal;
-
-                                            updatePrimaryDashboard(
-                                                    signal
-                                            );
-
-                                            requestMultiTimeframeAnalysis(
-                                                    signal.getSymbol()
-                                            );
-                                        }
-                                );
-                            }
-
-                            @Override
-                            public void onError(
-                                    String message
-                            ) {
-
-                                runOnUiThread(
-                                        () -> {
-
-                                            mtfScanning = false;
-
-                                            connectionStatus.setText(
-                                                    "●  DATA ERROR • "
-                                                            + selectedMarket
-                                            );
-
-                                            connectionStatus.setTextColor(
-                                                    RED
-                                            );
-
-                                            signalText.setText(
-                                                    "WAIT"
-                                            );
-
-                                            signalText.setTextColor(
-                                                    YELLOW
-                                            );
-
-                                            if (message != null
-                                                    && !message.trim().isEmpty()) {
-
-                                                nextMarketText.setText(
-                                                        "DATA ERROR • "
-                                                                + message
-                                                );
-
-                                            }
-
-                                            mtfConfluenceText.setText(
-                                                    "MTF CONFLUENCE • DATA ERROR"
-                                            );
-
-                                            mtfConfluenceText.setTextColor(
-                                                    RED
-                                            );
-
-                                            resetMtfDisplay();
-                                        }
-                                );
-                            }
-                        }
-                );
+                    if (message != null && !message.trim().isEmpty()) {
+                        nextMarketText.setText("DATA ERROR • " + message);
+                    }
+                    mtfConfluenceText.setText("MTF CONFLUENCE • DATA ERROR");
+                    mtfConfluenceText.setTextColor(RED);
+                    resetMtfDisplay();
+                });
+            }
+        });
 
         requestChartCandles();
-
-        if (isForexMarketOpen(
-                new Date()
-        )) {
-
+        if (isForexMarketOpen(new Date())) {
             requestCurrentSignal();
-
         } else {
-
             showMarketClosedState();
         }
     }
 
-    // =============================================================
-    // HISTORICAL CHART DATA
-    // =============================================================
-
     private void requestChartCandles() {
+        if (marketDataProvider == null) return;
 
-        if (marketDataProvider == null) {
-            return;
-        }
-
-        final String market =
-                selectedMarket;
-
-        final String timeframe =
-                selectedTimeframe;
+        final String market = selectedMarket;
+        final String timeframe = selectedTimeframe;
 
         if (connectionStatus != null) {
-
-            connectionStatus.setText(
-                    "●  LOADING CHART • "
-                            + market
-                            + " • "
-                            + timeframe
-            );
-
-            connectionStatus.setTextColor(
-                    YELLOW
-            );
+            connectionStatus.setText("●  LOADING CHART • "
+                    + market + " • " + timeframe);
+            connectionStatus.setTextColor(YELLOW);
         }
 
-        marketDataProvider.requestCandles(
-                market,
-                timeframe,
+        marketDataProvider.requestCandles(market, timeframe,
                 new MarketDataManager.MarketDataCallback() {
+            @Override
+            public void onCandlesReceived(List<Candle> candles) {
+                runOnUiThread(() -> {
+                    if (!market.equals(selectedMarket)
+                            || !timeframe.equals(selectedTimeframe)) return;
 
-                    @Override
-                    public void onCandlesReceived(
-                            List<Candle> candles
-                    ) {
-
-                        runOnUiThread(
-                                () -> {
-
-                                    if (!market.equals(
-                                            selectedMarket
-                                    )) {
-                                        return;
-                                    }
-
-                                    if (!timeframe.equals(
-                                            selectedTimeframe
-                                    )) {
-                                        return;
-                                    }
-
-                                    if (candles == null
-                                            || candles.isEmpty()) {
-
-                                        connectionStatus.setText(
-                                                "●  CHART DATA EMPTY"
-                                        );
-
-                                        connectionStatus.setTextColor(
-                                                RED
-                                        );
-
-                                        return;
-                                    }
-
-                                    forexChartView.setCandles(
-                                            candles
-                                    );
-
-                                    updateIndicatorDashboard(
-                                            market,
-                                            candles
-                                    );
-
-                                    Candle latest =
-                                            candles.get(
-                                                    candles.size() - 1
-                                            );
-
-                                    if (latest != null) {
-
-                                        double close =
-                                                latest.getClose();
-
-                                        if (!Double.isNaN(close)
-                                                && !Double.isInfinite(close)) {
-
-                                            priceText.setText(
-                                                    "PRICE  "
-                                                            + formatPrice(
-                                                            market,
-                                                            close
-                                                    )
-                                            );
-                                        }
-                                    }
-
-                                    boolean open =
-                                            isForexMarketOpen(
-                                                    new Date()
-                                            );
-
-                                    if (open) {
-
-                                        connectionStatus.setText(
-                                                "●  LIVE CHART • "
-                                                        + market
-                                                        + " • "
-                                                        + timeframe
-                                                        + " • "
-                                                        + candles.size()
-                                                        + " CANDLES"
-                                        );
-
-                                        connectionStatus.setTextColor(
-                                                GREEN
-                                        );
-
-                                    } else {
-
-                                        connectionStatus.setText(
-                                                "●  HISTORICAL CHART • "
-                                                        + market
-                                                        + " • "
-                                                        + timeframe
-                                                        + " • "
-                                                        + candles.size()
-                                                        + " CANDLES"
-                                        );
-
-                                        connectionStatus.setTextColor(
-                                                MUTED
-                                        );
-                                    }
-                                }
-                        );
+                    if (candles == null || candles.isEmpty()) {
+                        connectionStatus.setText("●  CHART DATA EMPTY");
+                        connectionStatus.setTextColor(RED);
+                        return;
                     }
 
-                    @Override
-                    public void onPriceReceived(
-                            double price
-                    ) {
+                    forexChartView.setCandles(candles);
+                    forexChartView.setLineChartMode(lineChartMode);
+                    updateIndicatorDashboard(market, candles);
 
-                        runOnUiThread(
-                                () -> {
-
-                                    if (!market.equals(
-                                            selectedMarket
-                                    )) {
-                                        return;
-                                    }
-
-                                    if (!Double.isNaN(price)
-                                            && !Double.isInfinite(price)) {
-
-                                        priceText.setText(
-                                                "PRICE  "
-                                                        + formatPrice(
-                                                        market,
-                                                        price
-                                                )
-                                        );
-                                    }
-                                }
-                        );
+                    Candle latest = candles.get(candles.size() - 1);
+                    if (latest != null) {
+                        double close = latest.getClose();
+                        if (!Double.isNaN(close) && !Double.isInfinite(close)) {
+                            priceText.setText("PRICE  " + formatPrice(market, close));
+                        }
                     }
 
-                    @Override
-                    public void onError(
-                            String message
-                    ) {
+                    boolean open = isForexMarketOpen(new Date());
+                    connectionStatus.setText((open
+                            ? "●  LIVE CHART • "
+                            : "●  HISTORICAL CHART • ")
+                            + market + " • " + timeframe + " • "
+                            + candles.size() + " CANDLES");
+                    connectionStatus.setTextColor(open ? GREEN : MUTED);
+                });
+            }
 
-                        runOnUiThread(
-                                () -> {
-
-                                    if (!market.equals(
-                                            selectedMarket
-                                    )) {
-                                        return;
-                                    }
-
-                                    connectionStatus.setText(
-                                            "●  CHART DATA ERROR"
-                                    );
-
-                                    connectionStatus.setTextColor(
-                                            RED
-                                    );
-
-                                    nextMarketText.setText(
-                                            "CHART ERROR • "
-                                                    + (message == null
-                                                    ? "UNKNOWN ERROR"
-                                                    : message)
-                                    );
-
-                                    nextMarketText.setTextColor(
-                                            RED
-                                    );
-                                }
-                        );
+            @Override
+            public void onPriceReceived(double price) {
+                runOnUiThread(() -> {
+                    if (!market.equals(selectedMarket)) return;
+                    if (!Double.isNaN(price) && !Double.isInfinite(price)) {
+                        priceText.setText("PRICE  " + formatPrice(market, price));
                     }
-                }
-        );
+                });
+            }
+
+            @Override
+            public void onError(String message) {
+                runOnUiThread(() -> {
+                    if (!market.equals(selectedMarket)) return;
+                    connectionStatus.setText("●  CHART DATA ERROR");
+                    connectionStatus.setTextColor(RED);
+                    nextMarketText.setText("CHART ERROR • "
+                            + (message == null ? "UNKNOWN ERROR" : message));
+                    nextMarketText.setTextColor(RED);
+                });
+            }
+        });
     }
 
-    // =============================================================
-    // INDICATOR DATA FROM REAL CANDLES
-    // =============================================================
+    private void updateIndicatorDashboard(String market, List<Candle> candles) {
+        if (candles == null || candles.isEmpty()) return;
 
-    private void updateIndicatorDashboard(
-            String market,
-            List<Candle> candles
-    ) {
-
-        if (candles == null
-                || candles.isEmpty()) {
-            return;
-        }
-
-        String trend =
-                IndicatorEngine.trend(
-                        candles,
-                        20,
-                        50
-                );
-
-        double rsi =
-                IndicatorEngine.rsi(
-                        candles,
-                        14
-                );
-
-        double atr =
-                IndicatorEngine.atr(
-                        candles,
-                        14
-                );
-
-        double momentum =
-                IndicatorEngine.momentum(
-                        candles,
-                        5
-                );
+        String trend = IndicatorEngine.trend(candles, 20, 50);
+        double rsi = IndicatorEngine.rsi(candles, 14);
+        double atr = IndicatorEngine.atr(candles, 14);
+        double momentum = IndicatorEngine.momentum(candles, 5);
 
         if (trendText != null) {
-
-            trendText.setText(
-                    "TREND\n"
-                            + (trend == null
-                            ? "--"
-                            : trend)
-            );
-
-            if ("BULLISH".equalsIgnoreCase(
-                    trend
-            )) {
-
-                trendText.setTextColor(
-                        GREEN
-                );
-
-            } else if ("BEARISH".equalsIgnoreCase(
-                    trend
-            )) {
-
-                trendText.setTextColor(
-                        RED
-                );
-
+            trendText.setText("TREND\n" + (trend == null ? "--" : trend));
+            if ("BULLISH".equalsIgnoreCase(trend)) {
+                trendText.setTextColor(GREEN);
+            } else if ("BEARISH".equalsIgnoreCase(trend)) {
+                trendText.setTextColor(RED);
             } else {
-
-                trendText.setTextColor(
-                        WHITE
-                );
+                trendText.setTextColor(WHITE);
             }
         }
 
         if (rsiText != null) {
-
-            if (!Double.isNaN(rsi)
-                    && !Double.isInfinite(rsi)) {
-
-                rsiText.setText(
-                        "RSI\n"
-                                + String.format(
-                                Locale.US,
-                                "%.2f",
-                                rsi
-                        )
-                );
-
-                if (rsi >= 70.0) {
-
-                    rsiText.setTextColor(
-                            RED
-                    );
-
-                } else if (rsi <= 30.0) {
-
-                    rsiText.setTextColor(
-                            GREEN
-                    );
-
-                } else {
-
-                    rsiText.setTextColor(
-                            WHITE
-                    );
-                }
-
+            if (Double.isFinite(rsi)) {
+                rsiText.setText("RSI\n" + String.format(Locale.US, "%.2f", rsi));
+                rsiText.setTextColor(rsi >= 70 ? RED : rsi <= 30 ? GREEN : WHITE);
             } else {
-
-                rsiText.setText(
-                        "RSI\n--"
-                );
+                rsiText.setText("RSI\n--");
             }
         }
 
         if (atrText != null) {
-
-            if (!Double.isNaN(atr)
-                    && !Double.isInfinite(atr)) {
-
-                atrText.setText(
-                        "ATR\n"
-                                + formatPrice(
-                                market,
-                                atr
-                        )
-                );
-
-            } else {
-
-                atrText.setText(
-                        "ATR\n--"
-                );
-            }
+            atrText.setText("ATR\n" + (Double.isFinite(atr)
+                    ? formatPrice(market, atr) : "--"));
         }
 
         if (momentumText != null) {
-
-            if (!Double.isNaN(momentum)
-                    && !Double.isInfinite(momentum)) {
-
-                momentumText.setText(
-                        "MOMENTUM\n"
-                                + formatPrice(
-                                market,
-                                momentum
-                        )
-                );
-
-            } else {
-
-                momentumText.setText(
-                        "TIMEFRAME\n"
-                                + selectedTimeframe
-                );
-            }
+            momentumText.setText(Double.isFinite(momentum)
+                    ? "MOMENTUM\n" + formatPrice(market, momentum)
+                    : "TIMEFRAME\n" + selectedTimeframe);
         }
     }
 
-    // =============================================================
-    // PRIMARY SIGNAL
-    // =============================================================
-
     private void requestCurrentSignal() {
+        if (signalRepository == null || mtfScanning) return;
 
-        if (signalRepository == null) {
-            return;
-        }
-
-        if (mtfScanning) {
-            return;
-        }
-
-        if (!isForexMarketOpen(
-                new Date()
-        )) {
-
+        if (!isForexMarketOpen(new Date())) {
             requestChartCandles();
             return;
         }
 
-        final String marketToScan =
-                selectedMarket;
-
-        final String timeframeToScan =
-                selectedTimeframe;
+        final String marketToScan = selectedMarket;
+        final String timeframeToScan = selectedTimeframe;
 
         pendingPrimarySignal = null;
         mtfResults.clear();
-
         resetMtfDisplay();
 
-        connectionStatus.setText(
-                "●  SCANNING "
-                        + marketToScan
-                        + " • "
-                        + timeframeToScan
-        );
-
-        connectionStatus.setTextColor(
-                YELLOW
-        );
-
-        signalText.setText(
-                "WAIT"
-        );
-
-        signalText.setTextColor(
-                YELLOW
-        );
-
+        connectionStatus.setText("●  SCANNING "
+                + marketToScan + " • " + timeframeToScan);
+        connectionStatus.setTextColor(YELLOW);
+        signalText.setText("WAIT");
+        signalText.setTextColor(YELLOW);
         clearTradeLevels();
+        priceText.setText("PRICE  --");
 
-        if (forexChartView != null) {
-            forexChartView.clearTradeLevels();
-        }
-
-        priceText.setText(
-                "PRICE  --"
-        );
-
-        signalRepository.requestSignal(
-                marketToScan,
-                timeframeToScan
-        );
+        signalRepository.requestSignal(marketToScan, timeframeToScan);
     }
 
-    // =============================================================
-    // MULTI-TIMEFRAME ANALYSIS
-    // =============================================================
-
-    private void requestMultiTimeframeAnalysis(
-            String market
-    ) {
-
+    private void requestMultiTimeframeAnalysis(String market) {
         if (marketDataProvider == null) {
-            finishMtfWithWait(
-                    "NO DATA PROVIDER"
-            );
+            finishMtfWithWait("NO DATA PROVIDER");
             return;
         }
-
-        if (!isForexMarketOpen(
-                new Date()
-        )) {
-
-            return;
-        }
+        if (!isForexMarketOpen(new Date())) return;
 
         mtfResults.clear();
         mtfRequestIndex = 0;
         mtfScanning = true;
-
         resetMtfDisplay();
 
-        mtfConfluenceText.setText(
-                "MTF CONFLUENCE • SCANNING 1/6"
-        );
-
-        mtfConfluenceText.setTextColor(
-                YELLOW
-        );
-
+        mtfConfluenceText.setText("MTF CONFLUENCE • SCANNING 1/6");
+        mtfConfluenceText.setTextColor(YELLOW);
         connectionStatus.setText(
-                "●  PRIMARY SIGNAL FOUND • CHECKING 6 TIMEFRAMES"
-        );
-
-        connectionStatus.setTextColor(
-                YELLOW
-        );
-
-        requestNextMtfTimeframe(
-                market
-        );
+                "●  PRIMARY SIGNAL FOUND • CHECKING 6 TIMEFRAMES");
+        connectionStatus.setTextColor(YELLOW);
+        requestNextMtfTimeframe(market);
     }
 
-    private void requestNextMtfTimeframe(
-            String market
-    ) {
-
-        if (!mtfScanning) {
-            return;
-        }
-
-        if (!isForexMarketOpen(
-                new Date()
-        )) {
-
+    private void requestNextMtfTimeframe(String market) {
+        if (!mtfScanning) return;
+        if (!isForexMarketOpen(new Date())) {
             mtfScanning = false;
             return;
         }
-
         if (mtfRequestIndex >= timeframes.length) {
-
             finishMtfAnalysis();
-
             return;
         }
 
-        final int currentIndex =
-                mtfRequestIndex;
+        final int currentIndex = mtfRequestIndex;
+        final String timeframe = timeframes[currentIndex];
 
-        final String timeframe =
-                timeframes[currentIndex];
+        mtfConfluenceText.setText("MTF CONFLUENCE • SCANNING "
+                + (currentIndex + 1) + "/6 • " + timeframe);
 
-        mtfConfluenceText.setText(
-                "MTF CONFLUENCE • SCANNING "
-                        + (currentIndex + 1)
-                        + "/6 • "
-                        + timeframe
-        );
-
-        marketDataProvider.requestCandles(
-                market,
-                timeframe,
+        marketDataProvider.requestCandles(market, timeframe,
                 new MarketDataManager.MarketDataCallback() {
+            @Override
+            public void onCandlesReceived(List<Candle> candles) {
+                runOnUiThread(() -> {
+                    if (!mtfScanning) return;
 
-                    @Override
-                    public void onCandlesReceived(
-                            List<Candle> candles
-                    ) {
+                    MultiTimeframeEngine.TimeframeResult result =
+                            MultiTimeframeEngine.analyzeTimeframe(
+                                    market, timeframe, candles);
+                    mtfResults.add(result);
+                    updateMtfBox(timeframe, result);
+                    mtfRequestIndex++;
 
-                        runOnUiThread(
-                                () -> {
-
-                                    if (!mtfScanning) {
-                                        return;
-                                    }
-
-                                    MultiTimeframeEngine.TimeframeResult result =
-                                            MultiTimeframeEngine.analyzeTimeframe(
-                                                    market,
-                                                    timeframe,
-                                                    candles
-                                            );
-
-                                    mtfResults.add(
-                                            result
-                                    );
-
-                                    updateMtfBox(
-                                            timeframe,
-                                            result
-                                    );
-
-                                    mtfRequestIndex++;
-
-                                    if (mtfRequestIndex
-                                            < timeframes.length) {
-
-                                        requestNextMtfTimeframe(
-                                                market
-                                        );
-
-                                    } else {
-
-                                        finishMtfAnalysis();
-                                    }
-                                }
-                        );
+                    if (mtfRequestIndex < timeframes.length) {
+                        requestNextMtfTimeframe(market);
+                    } else {
+                        finishMtfAnalysis();
                     }
+                });
+            }
 
-                    @Override
-                    public void onPriceReceived(
-                            double price
-                    ) {
-
-                        runOnUiThread(
-                                () -> {
-
-                                    if (!Double.isNaN(price)
-                                            && !Double.isInfinite(price)) {
-
-                                        priceText.setText(
-                                                "PRICE  "
-                                                        + formatPrice(
-                                                        market,
-                                                        price
-                                                )
-                                        );
-                                    }
-                                }
-                        );
+            @Override
+            public void onPriceReceived(double price) {
+                runOnUiThread(() -> {
+                    if (Double.isFinite(price)) {
+                        priceText.setText("PRICE  " + formatPrice(market, price));
                     }
+                });
+            }
 
-                    @Override
-                    public void onError(
-                            String message
-                    ) {
+            @Override
+            public void onError(String message) {
+                runOnUiThread(() -> {
+                    if (!mtfScanning) return;
 
-                        runOnUiThread(
-                                () -> {
+                    MultiTimeframeEngine.TimeframeResult result =
+                            new MultiTimeframeEngine.TimeframeResult(
+                                    timeframe, Signal.Direction.WAIT,
+                                    "DATA ERROR", Double.NaN, Double.NaN);
+                    mtfResults.add(result);
+                    updateMtfBox(timeframe, result);
+                    mtfRequestIndex++;
 
-                                    if (!mtfScanning) {
-                                        return;
-                                    }
-
-                                    MultiTimeframeEngine.TimeframeResult errorResult =
-                                            new MultiTimeframeEngine.TimeframeResult(
-                                                    timeframe,
-                                                    Signal.Direction.WAIT,
-                                                    "DATA ERROR",
-                                                    Double.NaN,
-                                                    Double.NaN
-                                            );
-
-                                    mtfResults.add(
-                                            errorResult
-                                    );
-
-                                    updateMtfBox(
-                                            timeframe,
-                                            errorResult
-                                    );
-
-                                    mtfRequestIndex++;
-
-                                    if (mtfRequestIndex
-                                            < timeframes.length) {
-
-                                        requestNextMtfTimeframe(
-                                                market
-                                        );
-
-                                    } else {
-
-                                        finishMtfAnalysis();
-                                    }
-                                }
-                        );
+                    if (mtfRequestIndex < timeframes.length) {
+                        requestNextMtfTimeframe(market);
+                    } else {
+                        finishMtfAnalysis();
                     }
-                }
-        );
+                });
+            }
+        });
     }
 
     private void finishMtfAnalysis() {
-
         mtfScanning = false;
-
-        if (!isForexMarketOpen(
-                new Date()
-        )) {
-
-            return;
-        }
+        if (!isForexMarketOpen(new Date())) return;
 
         MultiTimeframeEngine.ConfluenceResult confluence =
-                MultiTimeframeEngine.calculateConfluence(
-                        mtfResults
-                );
+                MultiTimeframeEngine.calculateConfluence(mtfResults);
 
-        mtfConfluenceText.setText(
-                "MTF CONFLUENCE • BUY "
-                        + confluence.getBuyCount()
-                        + " • SELL "
-                        + confluence.getSellCount()
-                        + " • WAIT "
-                        + confluence.getWaitCount()
-                        + " • STRENGTH "
-                        + confluence.getStrength()
-        );
+        mtfConfluenceText.setText("MTF CONFLUENCE • BUY "
+                + confluence.getBuyCount() + " • SELL "
+                + confluence.getSellCount() + " • WAIT "
+                + confluence.getWaitCount() + " • STRENGTH "
+                + confluence.getStrength());
 
-        Signal.Direction mtfDirection =
-                confluence.getDirection();
-
+        Signal.Direction mtfDirection = confluence.getDirection();
         if (pendingPrimarySignal == null) {
-
-            finishMtfWithWait(
-                    "NO PRIMARY SIGNAL"
-            );
-
+            finishMtfWithWait("NO PRIMARY SIGNAL");
             return;
         }
 
-        Signal.Direction primaryDirection =
-                pendingPrimarySignal.getDirection();
+        Signal.Direction primaryDirection = pendingPrimarySignal.getDirection();
+        boolean primaryIsTrade = primaryDirection == Signal.Direction.BUY
+                || primaryDirection == Signal.Direction.SELL;
+        boolean mtfIsTrade = mtfDirection == Signal.Direction.BUY
+                || mtfDirection == Signal.Direction.SELL;
 
-        boolean primaryIsTrade =
-                primaryDirection == Signal.Direction.BUY
-                        || primaryDirection == Signal.Direction.SELL;
-
-        boolean mtfIsTrade =
-                mtfDirection == Signal.Direction.BUY
-                        || mtfDirection == Signal.Direction.SELL;
-
-        boolean confirmed =
-                primaryIsTrade
-                        && mtfIsTrade
-                        && primaryDirection == mtfDirection
-                        && confluence.getStrength() >= 3;
+        boolean confirmed = primaryIsTrade && mtfIsTrade
+                && primaryDirection == mtfDirection
+                && confluence.getStrength() >= 3;
 
         if (confirmed) {
+            int color = mtfDirection == Signal.Direction.BUY ? GREEN : RED;
+            mtfConfluenceText.setTextColor(color);
+            connectionStatus.setText("●  MTF CONFIRMED • "
+                    + mtfDirection.name() + " • STRENGTH "
+                    + confluence.getStrength());
+            connectionStatus.setTextColor(color);
 
-            mtfConfluenceText.setTextColor(
-                    mtfDirection == Signal.Direction.BUY
-                            ? GREEN
-                            : RED
-            );
-
-            connectionStatus.setText(
-                    "●  MTF CONFIRMED • "
-                            + mtfDirection.name()
-                            + " • STRENGTH "
-                            + confluence.getStrength()
-            );
-
-            connectionStatus.setTextColor(
-                    mtfDirection == Signal.Direction.BUY
-                            ? GREEN
-                            : RED
-            );
-
-            /*
-             * Send the real confirmed ForexPilot signal
-             * to the dashboard and chart trade levels.
-             */
             if (forexChartView != null) {
-                forexChartView.setTradeLevels(
-                        pendingPrimarySignal
-                );
+                forexChartView.setTradeLevels(pendingPrimarySignal);
             }
-
-            updateDashboard(
-                    pendingPrimarySignal
-            );
-
+            updateDashboard(pendingPrimarySignal);
         } else {
-
-            mtfConfluenceText.setTextColor(
-                    YELLOW
-            );
-
-            connectionStatus.setText(
-                    "●  MTF NOT CONFIRMED • WAIT"
-            );
-
-            connectionStatus.setTextColor(
-                    YELLOW
-            );
-
-            signalText.setText(
-                    "WAIT"
-            );
-
-            signalText.setTextColor(
-                    YELLOW
-            );
-
+            mtfConfluenceText.setTextColor(YELLOW);
+            connectionStatus.setText("●  MTF NOT CONFIRMED • WAIT");
+            connectionStatus.setTextColor(YELLOW);
+            signalText.setText("WAIT");
+            signalText.setTextColor(YELLOW);
             clearTradeLevels();
         }
     }
 
-    private void finishMtfWithWait(
-            String reason
-    ) {
-
+    private void finishMtfWithWait(String reason) {
         mtfScanning = false;
-
         if (signalText != null) {
-
-            signalText.setText(
-                    "WAIT"
-            );
-
-            signalText.setTextColor(
-                    YELLOW
-            );
+            signalText.setText("WAIT");
+            signalText.setTextColor(YELLOW);
         }
-
         clearTradeLevels();
-
-        if (forexChartView != null) {
-            forexChartView.clearTradeLevels();
-        }
-
+        if (forexChartView != null) forexChartView.clearTradeLevels();
         if (mtfConfluenceText != null) {
-
-            mtfConfluenceText.setText(
-                    "MTF CONFLUENCE • WAIT • "
-                            + reason
-            );
-
-            mtfConfluenceText.setTextColor(
-                    YELLOW
-            );
+            mtfConfluenceText.setText("MTF CONFLUENCE • WAIT • " + reason);
+            mtfConfluenceText.setTextColor(YELLOW);
         }
     }
-
-    // =============================================================
-    // MTF DISPLAY
-    // =============================================================
 
     private void resetMtfDisplay() {
-
-        setMtfBox(
-                mtf5mText,
-                "5M",
-                Signal.Direction.WAIT
-        );
-
-        setMtfBox(
-                mtf15mText,
-                "15M",
-                Signal.Direction.WAIT
-        );
-
-        setMtfBox(
-                mtf30mText,
-                "30M",
-                Signal.Direction.WAIT
-        );
-
-        setMtfBox(
-                mtf1hText,
-                "1H",
-                Signal.Direction.WAIT
-        );
-
-        setMtfBox(
-                mtf4hText,
-                "4H",
-                Signal.Direction.WAIT
-        );
-
-        setMtfBox(
-                mtf1dText,
-                "1D",
-                Signal.Direction.WAIT
-        );
+        setMtfBox(mtf5mText, "5M", Signal.Direction.WAIT);
+        setMtfBox(mtf15mText, "15M", Signal.Direction.WAIT);
+        setMtfBox(mtf30mText, "30M", Signal.Direction.WAIT);
+        setMtfBox(mtf1hText, "1H", Signal.Direction.WAIT);
+        setMtfBox(mtf4hText, "4H", Signal.Direction.WAIT);
+        setMtfBox(mtf1dText, "1D", Signal.Direction.WAIT);
 
         if (mtfConfluenceText != null) {
-
-            mtfConfluenceText.setText(
-                    "MTF CONFLUENCE • WAIT"
-            );
-
-            mtfConfluenceText.setTextColor(
-                    YELLOW
-            );
+            mtfConfluenceText.setText("MTF CONFLUENCE • WAIT");
+            mtfConfluenceText.setTextColor(YELLOW);
         }
     }
 
-    private void updateMtfBox(
-            String timeframe,
-            MultiTimeframeEngine.TimeframeResult result
-    ) {
-
-        if (result == null) {
-            return;
-        }
-
-        setMtfBox(
-                getMtfTextView(
-                        timeframe
-                ),
-                timeframe,
-                result.getDirection()
-        );
+    private void updateMtfBox(String timeframe,
+                              MultiTimeframeEngine.TimeframeResult result) {
+        if (result == null) return;
+        setMtfBox(getMtfTextView(timeframe), timeframe, result.getDirection());
     }
 
-    private TextView getMtfTextView(
-            String timeframe
-    ) {
-
-        if ("5M".equals(timeframe)) {
-            return mtf5mText;
-        }
-
-        if ("15M".equals(timeframe)) {
-            return mtf15mText;
-        }
-
-        if ("30M".equals(timeframe)) {
-            return mtf30mText;
-        }
-
-        if ("1H".equals(timeframe)) {
-            return mtf1hText;
-        }
-
-        if ("4H".equals(timeframe)) {
-            return mtf4hText;
-        }
-
+    private TextView getMtfTextView(String timeframe) {
+        if ("5M".equals(timeframe)) return mtf5mText;
+        if ("15M".equals(timeframe)) return mtf15mText;
+        if ("30M".equals(timeframe)) return mtf30mText;
+        if ("1H".equals(timeframe)) return mtf1hText;
+        if ("4H".equals(timeframe)) return mtf4hText;
         return mtf1dText;
     }
 
-    private void setMtfBox(
-            TextView view,
-            String timeframe,
-            Signal.Direction direction
-    ) {
-
-        if (view == null) {
-            return;
-        }
-
-        String directionText =
-                direction == null
-                        ? "WAIT"
-                        : direction.name();
-
-        view.setText(
-                timeframe
-                        + "\n"
-                        + directionText
-        );
-
+    private void setMtfBox(TextView view, String timeframe,
+                           Signal.Direction direction) {
+        if (view == null) return;
+        String label = direction == null ? "WAIT" : direction.name();
+        view.setText(timeframe + "\n" + label);
         if (direction == Signal.Direction.BUY) {
-
-            view.setTextColor(
-                    GREEN
-            );
-
+            view.setTextColor(GREEN);
         } else if (direction == Signal.Direction.SELL) {
-
-            view.setTextColor(
-                    RED
-            );
-
+            view.setTextColor(RED);
         } else {
-
-            view.setTextColor(
-                    YELLOW
-            );
+            view.setTextColor(YELLOW);
         }
     }
 
-    // =============================================================
-    // DASHBOARD
-    // =============================================================
+    private void updatePrimaryDashboard(Signal signal) {
+        if (signal == null
+                || !selectedMarket.equals(signal.getSymbol())
+                || !selectedTimeframe.equals(signal.getTimeframe())) return;
 
-    private void updatePrimaryDashboard(
-            Signal signal
-    ) {
-
-        if (signal == null) {
-            return;
+        if (!Double.isNaN(signal.getEntry())) {
+            priceText.setText("PRICE  "
+                    + formatPrice(signal.getSymbol(), signal.getEntry()));
         }
 
-        if (!selectedMarket.equals(
-                signal.getSymbol()
-        )) {
-            return;
-        }
-
-        if (!selectedTimeframe.equals(
-                signal.getTimeframe()
-        )) {
-            return;
-        }
-
-        if (!Double.isNaN(
-                signal.getEntry()
-        )) {
-
-            priceText.setText(
-                    "PRICE  "
-                            + formatPrice(
-                            signal.getSymbol(),
-                            signal.getEntry()
-                    )
-            );
-        }
-
-        trendText.setText(
-                "TREND\n"
-                        + signal.getTrend()
-        );
-
-        if (!Double.isNaN(
-                signal.getRsi()
-        )) {
-
-            rsiText.setText(
-                    "RSI\n"
-                            + String.format(
-                            Locale.US,
-                            "%.2f",
-                            signal.getRsi()
-                    )
-            );
-
-        } else {
-
-            rsiText.setText(
-                    "RSI\n--"
-            );
-        }
-
-        if (!Double.isNaN(
-                signal.getAtr()
-        )) {
-
-            atrText.setText(
-                    "ATR\n"
-                            + formatPrice(
-                            signal.getSymbol(),
-                            signal.getAtr()
-                    )
-            );
-
-        } else {
-
-            atrText.setText(
-                    "ATR\n--"
-            );
-        }
-
-        momentumText.setText(
-                "TIMEFRAME\n"
-                        + signal.getTimeframe()
-        );
+        trendText.setText("TREND\n" + signal.getTrend());
+        rsiText.setText(Double.isNaN(signal.getRsi()) ? "RSI\n--"
+                : "RSI\n" + String.format(Locale.US, "%.2f", signal.getRsi()));
+        atrText.setText(Double.isNaN(signal.getAtr()) ? "ATR\n--"
+                : "ATR\n" + formatPrice(signal.getSymbol(), signal.getAtr()));
+        momentumText.setText("TIMEFRAME\n" + signal.getTimeframe());
     }
 
-    private void updateDashboard(
-            Signal signal
-    ) {
-
-        if (signal == null) {
+    private void updateDashboard(Signal signal) {
+        if (signal == null) return;
+        if (!isForexMarketOpen(new Date())) {
+            updatePrimaryDashboard(signal);
             return;
         }
+        if (!selectedMarket.equals(signal.getSymbol())
+                || !selectedTimeframe.equals(signal.getTimeframe())) return;
 
-        if (!isForexMarketOpen(
-                new Date()
-        )) {
-
-            updatePrimaryDashboard(
-                    signal
-            );
-
-            return;
-        }
-
-        if (!selectedMarket.equals(
-                signal.getSymbol()
-        )) {
-            return;
-        }
-
-        if (!selectedTimeframe.equals(
-                signal.getTimeframe()
-        )) {
-            return;
-        }
-
-        marketName.setText(
-                signal.getSymbol()
-        );
-
-        connectionStatus.setText(
-                "●  LIVE DATA • MTF CONFIRMED • "
-                        + signal.getSymbol()
-                        + " • "
-                        + signal.getTimeframe()
-        );
+        marketName.setText(signal.getSymbol());
+        connectionStatus.setText("●  LIVE DATA • MTF CONFIRMED • "
+                + signal.getSymbol() + " • " + signal.getTimeframe());
 
         connectionStatus.setTextColor(
-                signal.getDirection() == Signal.Direction.BUY
-                        ? GREEN
-                        : signal.getDirection() == Signal.Direction.SELL
-                        ? RED
-                        : YELLOW
-        );
+                signal.getDirection() == Signal.Direction.BUY ? GREEN
+                        : signal.getDirection() == Signal.Direction.SELL ? RED
+                        : YELLOW);
 
-        if (!Double.isNaN(
-                signal.getEntry()
-        )) {
+        priceText.setText(Double.isNaN(signal.getEntry()) ? "PRICE  --"
+                : "PRICE  " + formatPrice(signal.getSymbol(), signal.getEntry()));
 
-            priceText.setText(
-                    "PRICE  "
-                            + formatPrice(
-                            signal.getSymbol(),
-                            signal.getEntry()
-                    )
-            );
+        signalText.setText(signal.getDirection().name());
+        signalText.setTextColor(signal.getDirection() == Signal.Direction.BUY
+                ? GREEN : signal.getDirection() == Signal.Direction.SELL
+                ? RED : YELLOW);
 
+        trendText.setText("TREND\n" + signal.getTrend());
+        rsiText.setText(Double.isNaN(signal.getRsi()) ? "RSI\n--"
+                : "RSI\n" + String.format(Locale.US, "%.2f", signal.getRsi()));
+        atrText.setText(Double.isNaN(signal.getAtr()) ? "ATR\n--"
+                : "ATR\n" + formatPrice(signal.getSymbol(), signal.getAtr()));
+        momentumText.setText("TIMEFRAME\n" + signal.getTimeframe());
+
+        if (signal.getDirection() == Signal.Direction.BUY
+                || signal.getDirection() == Signal.Direction.SELL) {
+            entryText.setText("ENTRY                         "
+                    + formatPrice(signal.getSymbol(), signal.getEntry()));
+            stopLossText.setText("STOP LOSS                  "
+                    + formatPrice(signal.getSymbol(), signal.getStopLoss()));
+            tp1Text.setText("TAKE PROFIT 1          "
+                    + formatPrice(signal.getSymbol(), signal.getTakeProfit1()));
+            tp2Text.setText("TAKE PROFIT 2          "
+                    + formatPrice(signal.getSymbol(), signal.getTakeProfit2()));
+            tp3Text.setText("TAKE PROFIT 3          "
+                    + formatPrice(signal.getSymbol(), signal.getTakeProfit3()));
+
+            if (forexChartView != null) forexChartView.setTradeLevels(signal);
         } else {
-
-            priceText.setText(
-                    "PRICE  --"
-            );
-        }
-
-        signalText.setText(
-                signal.getDirection()
-                        .name()
-        );
-
-        if (signal.getDirection()
-                == Signal.Direction.BUY) {
-
-            signalText.setTextColor(
-                    GREEN
-            );
-
-        } else if (
-                signal.getDirection()
-                        == Signal.Direction.SELL
-        ) {
-
-            signalText.setTextColor(
-                    RED
-            );
-
-        } else {
-
-            signalText.setTextColor(
-                    YELLOW
-            );
-        }
-
-        trendText.setText(
-                "TREND\n"
-                        + signal.getTrend()
-        );
-
-        if (!Double.isNaN(
-                signal.getRsi()
-        )) {
-
-            rsiText.setText(
-                    "RSI\n"
-                            + String.format(
-                            Locale.US,
-                            "%.2f",
-                            signal.getRsi()
-                    )
-            );
-
-        } else {
-
-            rsiText.setText(
-                    "RSI\n--"
-            );
-        }
-
-        if (!Double.isNaN(
-                signal.getAtr()
-        )) {
-
-            atrText.setText(
-                    "ATR\n"
-                            + formatPrice(
-                            signal.getSymbol(),
-                            signal.getAtr()
-                    )
-            );
-
-        } else {
-
-            atrText.setText(
-                    "ATR\n--"
-            );
-        }
-
-        momentumText.setText(
-                "TIMEFRAME\n"
-                        + signal.getTimeframe()
-        );
-
-        if (signal.getDirection()
-                == Signal.Direction.BUY
-                || signal.getDirection()
-                == Signal.Direction.SELL) {
-
-            entryText.setText(
-                    "ENTRY                         "
-                            + formatPrice(
-                            signal.getSymbol(),
-                            signal.getEntry()
-                    )
-            );
-
-            stopLossText.setText(
-                    "STOP LOSS                  "
-                            + formatPrice(
-                            signal.getSymbol(),
-                            signal.getStopLoss()
-                    )
-            );
-
-            tp1Text.setText(
-                    "TAKE PROFIT 1          "
-                            + formatPrice(
-                            signal.getSymbol(),
-                            signal.getTakeProfit1()
-                    )
-            );
-
-            tp2Text.setText(
-                    "TAKE PROFIT 2          "
-                            + formatPrice(
-                            signal.getSymbol(),
-                            signal.getTakeProfit2()
-                    )
-            );
-
-            tp3Text.setText(
-                    "TAKE PROFIT 3          "
-                            + formatPrice(
-                            signal.getSymbol(),
-                            signal.getTakeProfit3()
-                    )
-            );
-
-            if (forexChartView != null) {
-                forexChartView.setTradeLevels(
-                        signal
-                );
-            }
-
-        } else {
-
             clearTradeLevels();
         }
     }
 
     private void clearTradeLevels() {
-
-        if (entryText != null) {
-            entryText.setText(
-                    "ENTRY                         --"
-            );
-        }
-
-        if (stopLossText != null) {
-            stopLossText.setText(
-                    "STOP LOSS                  --"
-            );
-        }
-
-        if (tp1Text != null) {
-            tp1Text.setText(
-                    "TAKE PROFIT 1          --"
-            );
-        }
-
-        if (tp2Text != null) {
-            tp2Text.setText(
-                    "TAKE PROFIT 2          --"
-            );
-        }
-
-        if (tp3Text != null) {
-            tp3Text.setText(
-                    "TAKE PROFIT 3          --"
-            );
-        }
-
-        if (forexChartView != null) {
-            forexChartView.clearTradeLevels();
-        }
+        if (entryText != null) entryText.setText("ENTRY                         --");
+        if (stopLossText != null) stopLossText.setText("STOP LOSS                  --");
+        if (tp1Text != null) tp1Text.setText("TAKE PROFIT 1          --");
+        if (tp2Text != null) tp2Text.setText("TAKE PROFIT 2          --");
+        if (tp3Text != null) tp3Text.setText("TAKE PROFIT 3          --");
+        if (forexChartView != null) forexChartView.clearTradeLevels();
     }
 
-    // =============================================================
-    // FORMATTING
-    // =============================================================
-
-    private String formatPrice(
-            String symbol,
-            double value
-    ) {
-
-        if (Double.isNaN(value)
-                || Double.isInfinite(value)) {
-
-            return "--";
+    private String formatPrice(String symbol, double value) {
+        if (Double.isNaN(value) || Double.isInfinite(value)) return "--";
+        if ("USD/JPY".equalsIgnoreCase(symbol)) {
+            return String.format(Locale.US, "%.3f", value);
         }
-
-        if ("USD/JPY".equalsIgnoreCase(
-                symbol
-        )) {
-
-            return String.format(
-                    Locale.US,
-                    "%.3f",
-                    value
-            );
+        if ("XAU/USD".equalsIgnoreCase(symbol)) {
+            return String.format(Locale.US, "%.2f", value);
         }
-
-        if ("XAU/USD".equalsIgnoreCase(
-                symbol
-        )) {
-
-            return String.format(
-                    Locale.US,
-                    "%.2f",
-                    value
-            );
-        }
-
-        return String.format(
-                Locale.US,
-                "%.5f",
-                value
-        );
+        return String.format(Locale.US, "%.5f", value);
     }
 
-    // =============================================================
-    // UI HELPERS
-    // =============================================================
-
-    private TextView createText(
-            String text,
-            float size,
-            int color,
-            boolean bold
-    ) {
-
-        TextView view =
-                new TextView(this);
-
-        view.setText(
-                text
-        );
-
-        view.setTextSize(
-                size
-        );
-
-        view.setTextColor(
-                color
-        );
-
-        if (bold) {
-
-            view.setTypeface(
-                    Typeface.DEFAULT,
-                    Typeface.BOLD
-            );
-        }
-
+    private TextView createText(String text, float size, int color, boolean bold) {
+        TextView view = new TextView(this);
+        view.setText(text);
+        view.setTextSize(size);
+        view.setTextColor(color);
+        if (bold) view.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         return view;
     }
 
-    private TextView createSmallLabel(
-            String text
-    ) {
-
-        return createText(
-                text,
-                11,
-                MUTED,
-                true
-        );
+    private TextView createSmallLabel(String text) {
+        return createText(text, 11, MUTED, true);
     }
 
-    private TextView createSessionRow(
-            String name
-    ) {
+    private TextView createSessionRow(String name) {
+        TextView view = createText("●  " + name + "     CHECKING...",
+                13, MUTED, true);
+        view.setPadding(14, 13, 14, 13);
 
-        TextView view =
-                createText(
-                        "●  "
-                                + name
-                                + "     CHECKING...",
-                        13,
-                        MUTED,
-                        true
-                );
-
-        view.setPadding(
-                14,
-                13,
-                14,
-                13
-        );
-
-        GradientDrawable background =
-                new GradientDrawable();
-
-        background.setColor(
-                Color.rgb(10, 16, 25)
-        );
-
-        background.setStroke(
-                1,
-                CARD_BORDER
-        );
-
-        background.setCornerRadius(
-                12
-        );
-
-        view.setBackground(
-                background
-        );
-
+        GradientDrawable background = new GradientDrawable();
+        background.setColor(Color.rgb(10, 16, 25));
+        background.setStroke(1, CARD_BORDER);
+        background.setCornerRadius(12);
+        view.setBackground(background);
         return view;
     }
 
-    private Spinner createSpinner(
-            String[] values
-    ) {
-
-        Spinner spinner =
-                new Spinner(this);
-
-        ArrayAdapter<String> adapter =
-                new ArrayAdapter<>(
-                        this,
-                        android.R.layout.simple_spinner_item,
-                        values
-                );
-
+    private Spinner createSpinner(String[] values) {
+        Spinner spinner = new Spinner(this);
+        ArrayAdapter<String> adapter = new ArrayAdapter<>(
+                this, android.R.layout.simple_spinner_item, values);
         adapter.setDropDownViewResource(
-                android.R.layout.simple_spinner_dropdown_item
-        );
-
-        spinner.setAdapter(
-                adapter
-        );
-
+                android.R.layout.simple_spinner_dropdown_item);
+        spinner.setAdapter(adapter);
         return spinner;
     }
 
-    private TextView createMetric(
-            String label,
-            String value
-    ) {
+    private TextView createMetric(String label, String value) {
+        TextView view = createText(label + "\n" + value, 14, WHITE, true);
+        view.setGravity(Gravity.CENTER);
+        view.setPadding(12, 15, 12, 15);
 
-        TextView view =
-                createText(
-                        label
-                                + "\n"
-                                + value,
-                        14,
-                        WHITE,
-                        true
-                );
-
-        view.setGravity(
-                Gravity.CENTER
-        );
-
-        view.setPadding(
-                12,
-                15,
-                12,
-                15
-        );
-
-        GradientDrawable background =
-                new GradientDrawable();
-
-        background.setColor(
-                Color.rgb(10, 16, 25)
-        );
-
-        background.setStroke(
-                1,
-                CARD_BORDER
-        );
-
-        background.setCornerRadius(
-                14
-        );
-
-        view.setBackground(
-                background
-        );
-
+        GradientDrawable background = new GradientDrawable();
+        background.setColor(Color.rgb(10, 16, 25));
+        background.setStroke(1, CARD_BORDER);
+        background.setCornerRadius(14);
+        view.setBackground(background);
         return view;
     }
 
-    private TextView createTradeRow(
-            String label,
-            int color
-    ) {
+    private TextView createTradeRow(String label, int color) {
+        TextView view = createText(label + "                         --",
+                14, color, true);
+        view.setPadding(14, 14, 14, 14);
 
-        TextView view =
-                createText(
-                        label
-                                + "                         --",
-                        14,
-                        color,
-                        true
-                );
-
-        view.setPadding(
-                14,
-                14,
-                14,
-                14
-        );
-
-        GradientDrawable background =
-                new GradientDrawable();
-
-        background.setColor(
-                Color.rgb(10, 16, 25)
-        );
-
-        background.setCornerRadius(
-                12
-        );
-
-        view.setBackground(
-                background
-        );
-
+        GradientDrawable background = new GradientDrawable();
+        background.setColor(Color.rgb(10, 16, 25));
+        background.setCornerRadius(12);
+        view.setBackground(background);
         return view;
     }
 
-    private TextView createTimeframeBox(
-            String text
-    ) {
+    private TextView createTimeframeBox(String text) {
+        TextView view = createText(text, 12, WHITE, true);
+        view.setGravity(Gravity.CENTER);
+        view.setPadding(20, 14, 20, 14);
 
-        TextView view =
-                createText(
-                        text,
-                        12,
-                        WHITE,
-                        true
-                );
+        GradientDrawable background = new GradientDrawable();
+        background.setColor(Color.rgb(10, 16, 25));
+        background.setStroke(1, CARD_BORDER);
+        background.setCornerRadius(14);
+        view.setBackground(background);
 
-        view.setGravity(
-                Gravity.CENTER
-        );
-
-        view.setPadding(
-                20,
-                14,
-                20,
-                14
-        );
-
-        GradientDrawable background =
-                new GradientDrawable();
-
-        background.setColor(
-                Color.rgb(10, 16, 25)
-        );
-
-        background.setStroke(
-                1,
-                CARD_BORDER
-        );
-
-        background.setCornerRadius(
-                14
-        );
-
-        view.setBackground(
-                background
-        );
-
-        LinearLayout.LayoutParams boxParams =
-                new LinearLayout.LayoutParams(
-                        LinearLayout.LayoutParams.WRAP_CONTENT,
-                        LinearLayout.LayoutParams.WRAP_CONTENT
-                );
-
-        boxParams.setMargins(
-                0,
-                0,
-                8,
-                0
-        );
-
-        view.setLayoutParams(
-                boxParams
-        );
-
+        LinearLayout.LayoutParams boxParams = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT);
+        boxParams.setMargins(0, 0, 8, 0);
+        view.setLayoutParams(boxParams);
         return view;
     }
 
     private LinearLayout createMetricRow() {
-
-        LinearLayout row =
-                new LinearLayout(this);
-
-        row.setOrientation(
-                LinearLayout.HORIZONTAL
-        );
-
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
         return row;
     }
 
     private LinearLayout createCard() {
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setPadding(18, 18, 18, 18);
 
-        LinearLayout card =
-                new LinearLayout(this);
-
-        card.setOrientation(
-                LinearLayout.VERTICAL
-        );
-
-        card.setPadding(
-                18,
-                18,
-                18,
-                18
-        );
-
-        GradientDrawable background =
-                new GradientDrawable();
-
-        background.setColor(
-                CARD
-        );
-
-        background.setStroke(
-                1,
-                CARD_BORDER
-        );
-
-        background.setCornerRadius(
-                18
-        );
-
-        card.setBackground(
-                background
-        );
-
+        GradientDrawable background = new GradientDrawable();
+        background.setColor(CARD);
+        background.setStroke(1, CARD_BORDER);
+        background.setCornerRadius(18);
+        card.setBackground(background);
         return card;
     }
 
-    private LinearLayout.LayoutParams params(
-            int topMargin
-    ) {
-
-        LinearLayout.LayoutParams layoutParams =
-                new LinearLayout.LayoutParams(
-                        LinearLayout.LayoutParams.MATCH_PARENT,
-                        LinearLayout.LayoutParams.WRAP_CONTENT
-                );
-
-        layoutParams.topMargin =
-                topMargin;
-
-        return layoutParams;
+    private LinearLayout.LayoutParams params(int topMargin) {
+        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT);
+        p.topMargin = topMargin;
+        return p;
     }
 
     private LinearLayout.LayoutParams weightParams() {
-
-        LinearLayout.LayoutParams layoutParams =
-                new LinearLayout.LayoutParams(
-                        0,
-                        LinearLayout.LayoutParams.WRAP_CONTENT,
-                        1
-                );
-
-        layoutParams.setMargins(
-                4,
-                0,
-                4,
-                0
-        );
-
-        return layoutParams;
+        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(
+                0, LinearLayout.LayoutParams.WRAP_CONTENT, 1);
+        p.setMargins(4, 0, 4, 0);
+        return p;
     }
 
     @Override
     protected void onDestroy() {
-
-        clockHandler.removeCallbacks(
-                clockRunnable
-        );
-
-        if (signalRepository != null) {
-            signalRepository.stop();
-        }
-
-        if (marketDataProvider != null) {
-            marketDataProvider.stop();
-        }
-
+        clockHandler.removeCallbacks(clockRunnable);
+        if (signalRepository != null) signalRepository.stop();
+        if (marketDataProvider != null) marketDataProvider.stop();
         super.onDestroy();
     }
 }
