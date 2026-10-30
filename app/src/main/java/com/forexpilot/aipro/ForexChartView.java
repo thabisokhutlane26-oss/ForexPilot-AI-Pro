@@ -21,6 +21,10 @@ import java.util.TimeZone;
 
 public class ForexChartView extends View {
 
+    public static final int MODE_CANDLES = 0;
+    public static final int MODE_LINE = 1;
+    public static final int MODE_BARS = 2;
+
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final List<Candle> candles = new ArrayList<>();
     private final ScaleGestureDetector scaleDetector;
@@ -28,19 +32,19 @@ public class ForexChartView extends View {
     private List<ForexPilotIndicator.Result> indicatorResults =
             new ArrayList<>();
 
-    private float lastX, lastY;
-    private boolean moving = false;
+    private float lastX;
+    private float lastY;
+    private boolean moving;
     private float candleWidth = 18f;
     private float spacing = 6f;
-    private float scrollOffset = 0f;
+    private float scrollOffset;
 
     private float crosshairX = -1f;
     private float crosshairY = -1f;
-    private boolean showCrosshair = false;
+    private boolean showCrosshair;
     private int selectedCandleIndex = -1;
 
-    // Chart style: false = candles, true = close-price line.
-    private boolean lineChartMode = false;
+    private int chartMode = MODE_CANDLES;
 
     private double entry = Double.NaN;
     private double stopLoss = Double.NaN;
@@ -49,6 +53,22 @@ public class ForexChartView extends View {
     private double tp3 = Double.NaN;
 
     private Signal.Direction signalDirection = Signal.Direction.WAIT;
+
+    private int backgroundColor = Color.rgb(10, 15, 25);
+    private int gridColor = Color.rgb(35, 45, 60);
+    private int borderColor = Color.rgb(65, 75, 90);
+    private int textColor = Color.rgb(175, 185, 200);
+    private int bullColor = Color.rgb(18, 209, 142);
+    private int bearColor = Color.rgb(255, 72, 87);
+    private int crosshairColor = Color.rgb(205, 215, 225);
+    private int indicatorBuyColor = Color.rgb(0, 235, 140);
+    private int indicatorSellColor = Color.rgb(255, 75, 95);
+    private int indicatorLineColor = Color.rgb(255, 190, 55);
+    private int priceLineColor = Color.rgb(100, 160, 220);
+    private int lineChartColor = Color.rgb(70, 170, 255);
+    private int entryColor = Color.rgb(80, 180, 255);
+    private int stopColor = Color.rgb(255, 72, 87);
+    private int targetColor = Color.rgb(18, 209, 142);
 
     private static final float MIN_CANDLE_WIDTH = 5f;
     private static final float MAX_CANDLE_WIDTH = 55f;
@@ -60,39 +80,107 @@ public class ForexChartView extends View {
     private static final float CHART_TOP = 28f;
     private static final float CHART_BOTTOM = 48f;
 
-    private static final int BACKGROUND = Color.rgb(10, 15, 25);
-    private static final int GRID = Color.rgb(35, 45, 60);
-    private static final int BORDER = Color.rgb(65, 75, 90);
-    private static final int TEXT = Color.rgb(175, 185, 200);
-    private static final int BULL = Color.rgb(0, 220, 130);
-    private static final int BEAR = Color.rgb(255, 70, 90);
-    private static final int CROSSHAIR = Color.rgb(205, 215, 225);
-    private static final int INDICATOR_BUY = Color.rgb(0, 235, 140);
-    private static final int INDICATOR_SELL = Color.rgb(255, 75, 95);
-    private static final int INDICATOR_LINE = Color.rgb(255, 190, 55);
-    private static final int PRICE_LINE = Color.rgb(100, 160, 220);
-
     public ForexChartView(Context context) {
         super(context);
         paint.setStrokeWidth(2f);
-        setBackgroundColor(BACKGROUND);
+        setBackgroundColor(backgroundColor);
         setFocusable(true);
         setFocusableInTouchMode(true);
-        scaleDetector = new ScaleGestureDetector(context, new ScaleListener());
+        scaleDetector = new ScaleGestureDetector(
+                context, new ScaleListener());
     }
 
-    // Public chart controls for MainActivity.
+    public void setChartMode(int mode) {
+        if (mode < MODE_CANDLES || mode > MODE_BARS) return;
+        chartMode = mode;
+        invalidate();
+    }
+
+    public int getChartMode() {
+        return chartMode;
+    }
+
     public void setLineChartMode(boolean enabled) {
-        lineChartMode = enabled;
+        chartMode = enabled ? MODE_LINE : MODE_CANDLES;
         invalidate();
     }
 
     public boolean isLineChartMode() {
-        return lineChartMode;
+        return chartMode == MODE_LINE;
+    }
+
+    public void setBarChartMode(boolean enabled) {
+        chartMode = enabled ? MODE_BARS : MODE_CANDLES;
+        invalidate();
+    }
+
+    public boolean isBarChartMode() {
+        return chartMode == MODE_BARS;
     }
 
     public void toggleChartStyle() {
-        lineChartMode = !lineChartMode;
+        chartMode = chartMode == MODE_CANDLES
+                ? MODE_LINE : MODE_CANDLES;
+        invalidate();
+    }
+
+    public void setChartColors(
+            int background,
+            int grid,
+            int bull,
+            int bear,
+            int line,
+            int text) {
+        backgroundColor = background;
+        gridColor = grid;
+        bullColor = bull;
+        bearColor = bear;
+        lineChartColor = line;
+        textColor = text;
+        setBackgroundColor(backgroundColor);
+        invalidate();
+    }
+
+    public void setBackgroundChartColor(int color) {
+        backgroundColor = color;
+        setBackgroundColor(color);
+        invalidate();
+    }
+
+    public void setGridColor(int color) {
+        gridColor = color;
+        invalidate();
+    }
+
+    public void setBullColor(int color) {
+        bullColor = color;
+        invalidate();
+    }
+
+    public void setBearColor(int color) {
+        bearColor = color;
+        invalidate();
+    }
+
+    public void setLineColor(int color) {
+        lineChartColor = color;
+        invalidate();
+    }
+
+    public void setTextColor(int color) {
+        textColor = color;
+        invalidate();
+    }
+
+    public void setIndicatorLineColor(int color) {
+        indicatorLineColor = color;
+        invalidate();
+    }
+
+    public void setTradeColors(int entry, int stop, int target) {
+        entryColor = entry;
+        stopColor = stop;
+        targetColor = target;
         invalidate();
     }
 
@@ -183,20 +271,19 @@ public class ForexChartView extends View {
 
         drawChart(canvas);
 
-        if (showCrosshair) {
-            drawCrosshair(canvas);
-        }
+        if (showCrosshair) drawCrosshair(canvas);
     }
 
     private void drawBackground(Canvas canvas) {
-        canvas.drawColor(BACKGROUND);
+        canvas.drawColor(backgroundColor);
 
         float right = getWidth() - CHART_RIGHT;
         float bottom = getHeight() - CHART_BOTTOM;
         float chartHeight = bottom - CHART_TOP;
+
         paint.setStyle(Paint.Style.STROKE);
         paint.setStrokeWidth(1f);
-        paint.setColor(GRID);
+        paint.setColor(gridColor);
 
         for (int i = 1; i < 6; i++) {
             float y = CHART_TOP + chartHeight * i / 6f;
@@ -219,7 +306,9 @@ public class ForexChartView extends View {
 
         int startIndex = calculateStartIndex();
         int visibleCount = calculateVisibleCount();
-        int endIndex = Math.min(candles.size(), startIndex + visibleCount);
+        int endIndex = Math.min(candles.size(),
+                startIndex + visibleCount);
+
         if (startIndex >= endIndex) return;
 
         double minPrice = Double.MAX_VALUE;
@@ -236,6 +325,7 @@ public class ForexChartView extends View {
              i < endIndex && i < indicatorResults.size(); i++) {
             ForexPilotIndicator.Result result = indicatorResults.get(i);
             if (result == null) continue;
+
             double value = result.getTrailingStop();
             if (Double.isFinite(value)) {
                 minPrice = Math.min(minPrice, value);
@@ -257,6 +347,7 @@ public class ForexChartView extends View {
 
         double tradeMin = validMinTradeLevel();
         double tradeMax = validMaxTradeLevel();
+
         if (Double.isFinite(tradeMin)) minPrice = Math.min(minPrice, tradeMin);
         if (Double.isFinite(tradeMax)) maxPrice = Math.max(maxPrice, tradeMax);
 
@@ -270,8 +361,11 @@ public class ForexChartView extends View {
         float chartBottom = height - CHART_BOTTOM;
         float chartHeight = chartBottom - chartTop;
 
-        if (lineChartMode) {
+        if (chartMode == MODE_LINE) {
             drawClosePriceLine(canvas, startIndex, endIndex,
+                    minPrice, priceRange, chartTop, chartHeight);
+        } else if (chartMode == MODE_BARS) {
+            drawBars(canvas, startIndex, endIndex,
                     minPrice, priceRange, chartTop, chartHeight);
         } else {
             drawCandles(canvas, startIndex, endIndex,
@@ -302,9 +396,8 @@ public class ForexChartView extends View {
             if (!isValidCandle(candle)) continue;
 
             float x = getCandleX(i, startIndex);
-            if (x < CHART_LEFT - candleWidth || x > getWidth() - CHART_RIGHT) {
-                continue;
-            }
+            if (x < CHART_LEFT - candleWidth
+                    || x > getWidth() - CHART_RIGHT) continue;
 
             float openY = priceToY(candle.getOpen(), minPrice, range,
                     chartTop, chartHeight);
@@ -315,16 +408,18 @@ public class ForexChartView extends View {
             float lowY = priceToY(candle.getLow(), minPrice, range,
                     chartTop, chartHeight);
 
-            int color = candle.getClose() >= candle.getOpen() ? BULL : BEAR;
-            paint.setColor(color);
+            paint.setColor(candle.getClose() >= candle.getOpen()
+                    ? bullColor : bearColor);
             paint.setStyle(Paint.Style.STROKE);
-            paint.setStrokeWidth(Math.max(1f, Math.min(2.5f, candleWidth * 0.10f)));
+            paint.setStrokeWidth(Math.max(1f,
+                    Math.min(2.5f, candleWidth * 0.10f)));
             canvas.drawLine(x, highY, x, lowY, paint);
 
             paint.setStyle(Paint.Style.FILL);
             float bodyTop = Math.min(openY, closeY);
             float bodyBottom = Math.max(openY, closeY);
-            float minimumBody = Math.max(2f, Math.min(5f, candleWidth * 0.25f));
+            float minimumBody = Math.max(2f,
+                    Math.min(5f, candleWidth * 0.25f));
 
             if (bodyBottom - bodyTop < minimumBody) {
                 float center = (bodyTop + bodyBottom) / 2f;
@@ -355,9 +450,44 @@ public class ForexChartView extends View {
         }
     }
 
-    private void drawClosePriceLine(Canvas canvas, int startIndex, int endIndex,
-                                    double minPrice, double range,
-                                    float chartTop, float chartHeight) {
+    private void drawBars(Canvas canvas, int startIndex, int endIndex,
+                          double minPrice, double range,
+                          float chartTop, float chartHeight) {
+        for (int i = startIndex; i < endIndex; i++) {
+            Candle candle = candles.get(i);
+            if (!isValidCandle(candle)) continue;
+
+            float x = getCandleX(i, startIndex);
+            if (x < CHART_LEFT - candleWidth
+                    || x > getWidth() - CHART_RIGHT) continue;
+
+            float openY = priceToY(candle.getOpen(), minPrice, range,
+                    chartTop, chartHeight);
+            float closeY = priceToY(candle.getClose(), minPrice, range,
+                    chartTop, chartHeight);
+            float highY = priceToY(candle.getHigh(), minPrice, range,
+                    chartTop, chartHeight);
+            float lowY = priceToY(candle.getLow(), minPrice, range,
+                    chartTop, chartHeight);
+
+            paint.setColor(candle.getClose() >= candle.getOpen()
+                    ? bullColor : bearColor);
+            paint.setStyle(Paint.Style.STROKE);
+            paint.setStrokeWidth(2f);
+
+            canvas.drawLine(x, highY, x, lowY, paint);
+
+            float tick = Math.max(3f, candleWidth * 0.25f);
+            canvas.drawLine(x - tick, openY, x, openY, paint);
+            canvas.drawLine(x, closeY, x + tick, closeY, paint);
+        }
+        paint.setStyle(Paint.Style.FILL);
+    }
+
+    private void drawClosePriceLine(Canvas canvas, int startIndex,
+                                    int endIndex, double minPrice,
+                                    double range, float chartTop,
+                                    float chartHeight) {
         Path path = new Path();
         boolean started = false;
 
@@ -384,19 +514,18 @@ public class ForexChartView extends View {
         paint.setStrokeWidth(2.5f);
         paint.setStrokeCap(Paint.Cap.ROUND);
         paint.setStrokeJoin(Paint.Join.ROUND);
-        paint.setColor(Color.rgb(70, 170, 255));
+        paint.setColor(lineChartColor);
         canvas.drawPath(path, paint);
         paint.setStrokeCap(Paint.Cap.BUTT);
         paint.setStyle(Paint.Style.FILL);
 
-        // Highlight the most recent close.
         if (endIndex > startIndex) {
             Candle latest = candles.get(endIndex - 1);
             if (isValidCandle(latest)) {
                 float x = getCandleX(endIndex - 1, startIndex);
                 float y = priceToY(latest.getClose(), minPrice, range,
                         chartTop, chartHeight);
-                paint.setColor(Color.rgb(70, 170, 255));
+                paint.setColor(lineChartColor);
                 canvas.drawCircle(x, y, 4f, paint);
             }
         }
@@ -426,7 +555,8 @@ public class ForexChartView extends View {
             }
 
             float x = getCandleX(i, startIndex);
-            float y = priceToY(value, minPrice, range, chartTop, chartHeight);
+            float y = priceToY(value, minPrice, range,
+                    chartTop, chartHeight);
 
             if (!pathStarted) {
                 path.moveTo(x, y);
@@ -440,7 +570,7 @@ public class ForexChartView extends View {
         paint.setStrokeWidth(2.5f);
         paint.setStrokeCap(Paint.Cap.ROUND);
         paint.setStrokeJoin(Paint.Join.ROUND);
-        paint.setColor(INDICATOR_LINE);
+        paint.setColor(indicatorLineColor);
         canvas.drawPath(path, paint);
         paint.setStrokeCap(Paint.Cap.BUTT);
         paint.setStyle(Paint.Style.FILL);
@@ -457,13 +587,13 @@ public class ForexChartView extends View {
             if (!isValidCandle(candle)) continue;
 
             float x = getCandleX(i, startIndex);
-            if (x < CHART_LEFT - 35f || x > getWidth() - CHART_RIGHT + 35f) {
-                continue;
-            }
+            if (x < CHART_LEFT - 35f
+                    || x > getWidth() - CHART_RIGHT + 35f) continue;
 
             boolean buy = type == ForexPilotIndicator.SignalType.BUY;
             double price = buy ? candle.getLow() : candle.getHigh();
-            float y = priceToY(price, minPrice, range, chartTop, chartHeight);
+            float y = priceToY(price, minPrice, range,
+                    chartTop, chartHeight);
             drawIndicatorSignalMarker(canvas, x, y, buy);
         }
     }
@@ -472,7 +602,7 @@ public class ForexChartView extends View {
                                            float candleY, boolean buy) {
         float markerY = buy ? candleY + 27f : candleY - 27f;
         paint.setStyle(Paint.Style.FILL);
-        paint.setColor(buy ? INDICATOR_BUY : INDICATOR_SELL);
+        paint.setColor(buy ? indicatorBuyColor : indicatorSellColor);
 
         Path arrow = new Path();
         if (buy) {
@@ -518,7 +648,7 @@ public class ForexChartView extends View {
                 chartTop, chartHeight);
         if (y < CHART_TOP || y > getHeight() - CHART_BOTTOM) return;
 
-        paint.setColor(PRICE_LINE);
+        paint.setColor(priceLineColor);
         paint.setStrokeWidth(1f);
         paint.setStyle(Paint.Style.STROKE);
 
@@ -530,8 +660,8 @@ public class ForexChartView extends View {
 
         paint.setStyle(Paint.Style.FILL);
         paint.setColor(Color.rgb(30, 50, 70));
-        canvas.drawRect(new RectF(getWidth() - CHART_RIGHT + 2f, y - 13f,
-                getWidth() - 2f, y + 13f), paint);
+        canvas.drawRect(new RectF(getWidth() - CHART_RIGHT + 2f,
+                y - 13f, getWidth() - 2f, y + 13f), paint);
         paint.setColor(Color.WHITE);
         paint.setTextSize(15f);
         canvas.drawText(formatPrice(latest.getClose()),
@@ -541,7 +671,7 @@ public class ForexChartView extends View {
     private void drawChartBorder(Canvas canvas) {
         paint.setStyle(Paint.Style.STROKE);
         paint.setStrokeWidth(1f);
-        paint.setColor(BORDER);
+        paint.setColor(borderColor);
         canvas.drawRect(CHART_LEFT, CHART_TOP,
                 getWidth() - CHART_RIGHT,
                 getHeight() - CHART_BOTTOM, paint);
@@ -551,32 +681,37 @@ public class ForexChartView extends View {
     private void drawTradeLevels(Canvas canvas, double minPrice,
                                  double maxPrice, double range,
                                  float chartTop, float chartHeight) {
-        drawTradeLine(canvas, entry, "ENTRY", Color.rgb(80, 180, 255),
+        drawTradeLine(canvas, entry, "ENTRY", entryColor,
                 minPrice, maxPrice, range, chartTop, chartHeight);
-        drawTradeLine(canvas, stopLoss, "SL", BEAR,
+        drawTradeLine(canvas, stopLoss, "SL", stopColor,
                 minPrice, maxPrice, range, chartTop, chartHeight);
-        drawTradeLine(canvas, tp1, "TP1", BULL,
+        drawTradeLine(canvas, tp1, "TP1", targetColor,
                 minPrice, maxPrice, range, chartTop, chartHeight);
-        drawTradeLine(canvas, tp2, "TP2", BULL,
+        drawTradeLine(canvas, tp2, "TP2", targetColor,
                 minPrice, maxPrice, range, chartTop, chartHeight);
-        drawTradeLine(canvas, tp3, "TP3", BULL,
+        drawTradeLine(canvas, tp3, "TP3", targetColor,
                 minPrice, maxPrice, range, chartTop, chartHeight);
     }
 
     private void drawTradeLine(Canvas canvas, double price, String label,
                                int color, double minPrice, double maxPrice,
-                               double range, float chartTop, float chartHeight) {
-        if (!Double.isFinite(price) || price < minPrice || price > maxPrice) return;
+                               double range, float chartTop,
+                               float chartHeight) {
+        if (!Double.isFinite(price)
+                || price < minPrice || price > maxPrice) return;
 
-        float y = priceToY(price, minPrice, range, chartTop, chartHeight);
+        float y = priceToY(price, minPrice, range,
+                chartTop, chartHeight);
         paint.setColor(color);
         paint.setStrokeWidth(1.5f);
         paint.setStyle(Paint.Style.STROKE);
-        canvas.drawLine(CHART_LEFT, y, getWidth() - CHART_RIGHT, y, paint);
+        canvas.drawLine(CHART_LEFT, y,
+                getWidth() - CHART_RIGHT, y, paint);
 
         paint.setStyle(Paint.Style.FILL);
         paint.setTextSize(17f);
-        canvas.drawText(label, getWidth() - CHART_RIGHT + 7f, y - 4f, paint);
+        canvas.drawText(label, getWidth() - CHART_RIGHT + 7f,
+                y - 4f, paint);
     }
 
     private void drawSignalMarker(Canvas canvas, int startIndex,
@@ -595,11 +730,12 @@ public class ForexChartView extends View {
 
         boolean buy = signalDirection == Signal.Direction.BUY;
         double price = buy ? last.getLow() : last.getHigh();
-        float y = priceToY(price, minPrice, range, chartTop, chartHeight);
+        float y = priceToY(price, minPrice, range,
+                chartTop, chartHeight);
         float markerY = buy ? y + 20f : y - 20f;
 
         paint.setStyle(Paint.Style.FILL);
-        paint.setColor(buy ? BULL : BEAR);
+        paint.setColor(buy ? bullColor : bearColor);
         canvas.drawCircle(x, markerY, 10f, paint);
         paint.setColor(Color.WHITE);
         paint.setTextSize(14f);
@@ -617,7 +753,7 @@ public class ForexChartView extends View {
 
         paint.setStyle(Paint.Style.STROKE);
         paint.setStrokeWidth(1f);
-        paint.setColor(CROSSHAIR);
+        paint.setColor(crosshairColor);
         canvas.drawLine(CHART_LEFT, crosshairY, right, crosshairY, paint);
         canvas.drawLine(crosshairX, CHART_TOP, crosshairX, bottom, paint);
         paint.setStyle(Paint.Style.FILL);
@@ -648,7 +784,8 @@ public class ForexChartView extends View {
                 getWidth() - 2f, crosshairY + 16f), paint);
         paint.setColor(Color.WHITE);
         paint.setTextSize(15f);
-        canvas.drawText(formatPrice(price), right + 7f, crosshairY + 5f, paint);
+        canvas.drawText(formatPrice(price), right + 7f,
+                crosshairY + 5f, paint);
     }
 
     private void drawCrosshairTime(Canvas canvas, Candle candle) {
@@ -665,7 +802,8 @@ public class ForexChartView extends View {
         paint.setColor(Color.WHITE);
         paint.setTextSize(13f);
         paint.setTextAlign(Paint.Align.CENTER);
-        canvas.drawText(time, left + boxWidth / 2f, bottom + 21f, paint);
+        canvas.drawText(time, left + boxWidth / 2f,
+                bottom + 21f, paint);
         paint.setTextAlign(Paint.Align.LEFT);
     }
 
@@ -677,33 +815,38 @@ public class ForexChartView extends View {
 
         paint.setColor(Color.rgb(18, 27, 40));
         paint.setStyle(Paint.Style.FILL);
-        canvas.drawRoundRect(new RectF(left, top, left + width, top + height),
-                8f, 8f, paint);
+        canvas.drawRoundRect(new RectF(left, top, left + width,
+                top + height), 8f, 8f, paint);
 
         paint.setColor(Color.rgb(80, 95, 115));
         paint.setStyle(Paint.Style.STROKE);
         paint.setStrokeWidth(1f);
-        canvas.drawRoundRect(new RectF(left, top, left + width, top + height),
-                8f, 8f, paint);
+        canvas.drawRoundRect(new RectF(left, top, left + width,
+                top + height), 8f, 8f, paint);
 
         paint.setStyle(Paint.Style.FILL);
         paint.setTextSize(13f);
-        paint.setColor(TEXT);
+        paint.setColor(textColor);
         canvas.drawText("CANDLE", left + 10f, top + 19f, paint);
 
         paint.setTextSize(12f);
         paint.setColor(Color.WHITE);
-        canvas.drawText("O  " + formatPrice(candle.getOpen()), left + 10f, top + 39f, paint);
-        canvas.drawText("H  " + formatPrice(candle.getHigh()), left + 10f, top + 57f, paint);
-        canvas.drawText("L  " + formatPrice(candle.getLow()), left + 10f, top + 75f, paint);
-        canvas.drawText("C  " + formatPrice(candle.getClose()), left + 10f, top + 93f, paint);
+        canvas.drawText("O  " + formatPrice(candle.getOpen()),
+                left + 10f, top + 39f, paint);
+        canvas.drawText("H  " + formatPrice(candle.getHigh()),
+                left + 10f, top + 57f, paint);
+        canvas.drawText("L  " + formatPrice(candle.getLow()),
+                left + 10f, top + 75f, paint);
+        canvas.drawText("C  " + formatPrice(candle.getClose()),
+                left + 10f, top + 93f, paint);
     }
 
     private double getPriceFromCrosshair() {
         if (candles.isEmpty()) return Double.NaN;
 
         int start = calculateStartIndex();
-        int end = Math.min(candles.size(), start + calculateVisibleCount());
+        int end = Math.min(candles.size(),
+                start + calculateVisibleCount());
         double min = Double.MAX_VALUE;
         double max = -Double.MAX_VALUE;
 
@@ -763,20 +906,24 @@ public class ForexChartView extends View {
         float slot = candleWidth + spacing;
         if (slot <= 0) return start;
 
-        int index = start + (int) Math.floor((x - CHART_LEFT) / slot);
+        int index = start + (int) Math.floor(
+                (x - CHART_LEFT) / slot);
         if (index < 0 || index >= candles.size()) return -1;
         return index;
     }
 
     private float priceToY(double price, double minPrice,
                            double range, float top, float chartHeight) {
-        if (!Double.isFinite(range) || range == 0) return top + chartHeight / 2f;
+        if (!Double.isFinite(range) || range == 0) {
+            return top + chartHeight / 2f;
+        }
         double normalized = (price - minPrice) / range;
         return (float) (top + chartHeight * (1.0 - normalized));
     }
 
-    private void drawPriceScale(Canvas canvas, double minPrice, double maxPrice) {
-        paint.setColor(TEXT);
+    private void drawPriceScale(Canvas canvas, double minPrice,
+                                double maxPrice) {
+        paint.setColor(textColor);
         paint.setTextSize(17f);
         paint.setStyle(Paint.Style.FILL);
 
@@ -791,13 +938,14 @@ public class ForexChartView extends View {
             canvas.drawRect(getWidth() - CHART_RIGHT, y - 1f,
                     getWidth() - CHART_RIGHT + 5f, y + 1f, paint);
 
-            paint.setColor(TEXT);
+            paint.setColor(textColor);
             canvas.drawText(formatPrice(price),
                     getWidth() - CHART_RIGHT + 8f, y + 5f, paint);
         }
     }
 
-    private void drawTimeScale(Canvas canvas, int startIndex, int endIndex) {
+    private void drawTimeScale(Canvas canvas, int startIndex,
+                               int endIndex) {
         if (endIndex <= startIndex) return;
 
         float bottom = getHeight() - CHART_BOTTOM;
@@ -806,7 +954,7 @@ public class ForexChartView extends View {
         int step = Math.max(1, count / labels);
 
         paint.setTextSize(12f);
-        paint.setColor(TEXT);
+        paint.setColor(textColor);
         paint.setTextAlign(Paint.Align.CENTER);
 
         for (int i = startIndex; i < endIndex; i += step) {
@@ -849,14 +997,14 @@ public class ForexChartView extends View {
         paint.setTextSize(23f);
         paint.setStyle(Paint.Style.FILL);
         paint.setTextAlign(Paint.Align.CENTER);
-        canvas.drawText(message, getWidth() / 2f, getHeight() / 2f, paint);
+        canvas.drawText(message, getWidth() / 2f,
+                getHeight() / 2f, paint);
         paint.setTextAlign(Paint.Align.LEFT);
     }
 
     private boolean isValidCandle(Candle candle) {
-        if (candle == null) return false;
-
-        return Double.isFinite(candle.getOpen())
+        return candle != null
+                && Double.isFinite(candle.getOpen())
                 && Double.isFinite(candle.getHigh())
                 && Double.isFinite(candle.getLow())
                 && Double.isFinite(candle.getClose())
@@ -910,7 +1058,8 @@ public class ForexChartView extends View {
             int desiredStart = focusIndex - (int) Math.floor(
                     (focusX - CHART_LEFT) / newSlot);
 
-            desiredStart = Math.max(0, Math.min(desiredStart, newMaxStart));
+            desiredStart = Math.max(0,
+                    Math.min(desiredStart, newMaxStart));
             scrollOffset = newMaxStart - desiredStart;
             clampScroll();
             invalidate();
