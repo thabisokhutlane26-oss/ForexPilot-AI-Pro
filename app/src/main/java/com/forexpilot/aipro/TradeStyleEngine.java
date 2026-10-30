@@ -26,8 +26,7 @@ public final class TradeStyleEngine {
                 Signal.Direction direction,
                 int confidence,
                 String reviewTime,
-                String reason
-        ) {
+                String reason) {
             this.style = style;
             this.direction = direction;
             this.confidence = confidence;
@@ -57,159 +56,120 @@ public final class TradeStyleEngine {
 
         public boolean isTradeAllowed() {
             return style != Style.NONE
+                    && direction != null
                     && direction != Signal.Direction.WAIT;
         }
     }
 
     private static final class StyleCandidate {
-
         final Style style;
         final String reviewTime;
-        final int requiredAgreement;
-        final int minimumConfidence;
         final String reason;
+        final int matches;
+        final int total;
+        final int priority;
 
         StyleCandidate(
                 Style style,
                 String reviewTime,
-                int requiredAgreement,
-                int minimumConfidence,
-                String reason
-        ) {
+                String reason,
+                int matches,
+                int total,
+                int priority) {
             this.style = style;
             this.reviewTime = reviewTime;
-            this.requiredAgreement = requiredAgreement;
-            this.minimumConfidence = minimumConfidence;
             this.reason = reason;
+            this.matches = matches;
+            this.total = total;
+            this.priority = priority;
+        }
+
+        double getRatio() {
+            return total == 0 ? 0.0 : (double) matches / total;
         }
     }
 
     private TradeStyleEngine() {
-        // Utility class.
     }
 
-    /**
-     * Selects a style using the primary signal and the available
-     * multi-timeframe results.
-     *
-     * Confidence is a rule-based score, not a probability of profit.
-     */
     public static TradeStylePlan selectBestStyle(
             Signal primarySignal,
-            List<MultiTimeframeEngine.TimeframeResult> results
-    ) {
+            List<MultiTimeframeEngine.TimeframeResult> results) {
+
         if (primarySignal == null
-                || results == null
                 || primarySignal.getDirection() == null
-                || primarySignal.getDirection() == Signal.Direction.WAIT) {
+                || primarySignal.getDirection() == Signal.Direction.WAIT
+                || results == null) {
             return waitPlan("No confirmed directional signal.");
         }
 
         Signal.Direction direction = primarySignal.getDirection();
 
-        int fiveMinute = countDirection(
-                results, direction, "5M"
-        );
-
-        int fifteenMinute = countDirection(
-                results, direction, "15M"
-        );
-
-        int thirtyMinute = countDirection(
-                results, direction, "30M"
-        );
-
-        int oneHour = countDirection(
-                results, direction, "1H"
-        );
-
-        int fourHour = countDirection(
-                results, direction, "4H"
-        );
-
-        int oneDay = countDirection(
-                results, direction, "1D"
-        );
+        int fiveMinute = countDirection(results, direction, "5M");
+        int fifteenMinute = countDirection(results, direction, "15M");
+        int thirtyMinute = countDirection(results, direction, "30M");
+        int oneHour = countDirection(results, direction, "1H");
+        int fourHour = countDirection(results, direction, "4H");
+        int oneDay = countDirection(results, direction, "1D");
 
         List<StyleCandidate> candidates = new ArrayList<>();
 
-        // Scalping needs agreement across short timeframes.
-        int scalpAgreement = fiveMinute
-                + fifteenMinute
-                + thirtyMinute;
+        // SCALP: at least two of the three short timeframes agree.
+        int scalpMatches = fiveMinute + fifteenMinute + thirtyMinute;
 
-        if (fiveMinute > 0
-                && fifteenMinute > 0
-                && thirtyMinute > 0
-                && scalpAgreement >= 3) {
+        if (scalpMatches >= 2) {
             candidates.add(new StyleCandidate(
                     Style.SCALP,
                     "Review in 30 minutes",
+                    "At least two of 5M, 15M and 30M support the signal.",
+                    scalpMatches,
                     3,
-                    65,
-                    "5M, 15M and 30M agree with the signal."
+                    1
             ));
         }
 
-        // Day trading needs intraday agreement and higher-timeframe context.
-        int dayAgreement = fifteenMinute
-                + thirtyMinute
-                + oneHour
-                + fourHour;
+        // DAY TRADE: at least three of four intraday timeframes agree.
+        int dayMatches = fifteenMinute + thirtyMinute
+                + oneHour + fourHour;
 
-        if (fifteenMinute > 0
-                && thirtyMinute > 0
-                && oneHour > 0
-                && dayAgreement >= 3) {
+        if (dayMatches >= 3) {
             candidates.add(new StyleCandidate(
                     Style.DAY_TRADE,
                     "Review in 4 hours",
-                    3,
-                    65,
-                    "Intraday timeframes support the signal."
+                    "At least three intraday timeframes support the signal.",
+                    dayMatches,
+                    4,
+                    2
             ));
         }
 
-        // Swing trading requires agreement from higher timeframes.
-        int swingAgreement = oneHour
-                + fourHour
-                + oneDay;
+        // SWING: at least two of the three longer timeframes agree.
+        int swingMatches = oneHour + fourHour + oneDay;
 
-        if (oneHour > 0
-                && fourHour > 0
-                && oneDay > 0
-                && swingAgreement >= 3) {
+        if (swingMatches >= 2) {
             candidates.add(new StyleCandidate(
                     Style.SWING,
                     "Review in 24 hours",
+                    "At least two of 1H, 4H and 1D support the signal.",
+                    swingMatches,
                     3,
-                    65,
-                    "1H, 4H and 1D agree with the signal."
+                    3
             ));
         }
 
         if (candidates.isEmpty()) {
             return waitPlan(
-                    "Timeframes do not provide enough agreement for a trade style."
+                    "Timeframe agreement is insufficient for a trade style."
             );
         }
 
-        int bestScore = -1;
         StyleCandidate best = null;
 
         for (StyleCandidate candidate : candidates) {
-            int score = getAgreementScore(
-                    candidate.style,
-                    fiveMinute,
-                    fifteenMinute,
-                    thirtyMinute,
-                    oneHour,
-                    fourHour,
-                    oneDay
-            );
-
-            if (score > bestScore) {
-                bestScore = score;
+            if (best == null
+                    || candidate.getRatio() > best.getRatio()
+                    || (candidate.getRatio() == best.getRatio()
+                    && candidate.priority > best.priority)) {
                 best = candidate;
             }
         }
@@ -218,16 +178,12 @@ public final class TradeStyleEngine {
             return waitPlan("No suitable trade style was found.");
         }
 
-        int confidence = Math.min(
-                95,
-                50 + (bestScore * 10)
-        );
+        // This is a rule-based agreement score, not a probability
+        // of a profitable trade.
+        int confidence = 60
+                + (int) Math.round(best.getRatio() * 30.0);
 
-        if (confidence < best.minimumConfidence) {
-            return waitPlan(
-                    "The available timeframe agreement is too weak."
-            );
-        }
+        confidence = Math.max(60, Math.min(90, confidence));
 
         return new TradeStylePlan(
                 best.style,
@@ -241,9 +197,7 @@ public final class TradeStyleEngine {
     private static int countDirection(
             List<MultiTimeframeEngine.TimeframeResult> results,
             Signal.Direction direction,
-            String timeframe
-    ) {
-        int count = 0;
+            String timeframe) {
 
         for (MultiTimeframeEngine.TimeframeResult result : results) {
             if (result == null
@@ -252,38 +206,16 @@ public final class TradeStyleEngine {
                 continue;
             }
 
-            if (timeframe.equalsIgnoreCase(result.getTimeframe())
-                    && result.getDirection() == direction) {
-                count++;
+            String label = result.getTimeframe()
+                    .trim()
+                    .toUpperCase(java.util.Locale.US);
+
+            if (timeframe.equals(label)) {
+                return result.getDirection() == direction ? 1 : 0;
             }
         }
 
-        return Math.min(count, 1);
-    }
-
-    private static int getAgreementScore(
-            Style style,
-            int fiveMinute,
-            int fifteenMinute,
-            int thirtyMinute,
-            int oneHour,
-            int fourHour,
-            int oneDay
-    ) {
-        switch (style) {
-            case SCALP:
-                return fiveMinute + fifteenMinute + thirtyMinute;
-
-            case DAY_TRADE:
-                return fifteenMinute + thirtyMinute
-                        + oneHour + fourHour;
-
-            case SWING:
-                return oneHour + fourHour + oneDay;
-
-            default:
-                return 0;
-        }
+        return 0;
     }
 
     private static TradeStylePlan waitPlan(String reason) {
