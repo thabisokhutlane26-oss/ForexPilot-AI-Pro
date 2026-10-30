@@ -27,32 +27,10 @@ public class ForexChartView extends View {
 
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final List<Candle> candles = new ArrayList<>();
+    private final List<DrawingObject> drawings = new ArrayList<>();
     private final ScaleGestureDetector scaleDetector;
 
-    private List<ForexPilotIndicator.Result> indicatorResults =
-            new ArrayList<>();
-
-    private float lastX;
-    private float lastY;
-    private boolean moving;
-    private float candleWidth = 18f;
-    private float spacing = 6f;
-    private float scrollOffset;
-
-    private float crosshairX = -1f;
-    private float crosshairY = -1f;
-    private boolean showCrosshair;
-    private int selectedCandleIndex = -1;
-
     private int chartMode = MODE_CANDLES;
-
-    private double entry = Double.NaN;
-    private double stopLoss = Double.NaN;
-    private double tp1 = Double.NaN;
-    private double tp2 = Double.NaN;
-    private double tp3 = Double.NaN;
-
-    private Signal.Direction signalDirection = Signal.Direction.WAIT;
 
     private int backgroundColor = Color.rgb(10, 15, 25);
     private int gridColor = Color.rgb(35, 45, 60);
@@ -60,25 +38,87 @@ public class ForexChartView extends View {
     private int textColor = Color.rgb(175, 185, 200);
     private int bullColor = Color.rgb(18, 209, 142);
     private int bearColor = Color.rgb(255, 72, 87);
-    private int crosshairColor = Color.rgb(205, 215, 225);
+    private int lineChartColor = Color.rgb(70, 170, 255);
+    private int indicatorLineColor = Color.rgb(60, 140, 255);
     private int indicatorBuyColor = Color.rgb(0, 235, 140);
     private int indicatorSellColor = Color.rgb(255, 75, 95);
-    private int indicatorLineColor = Color.rgb(255, 190, 55);
     private int priceLineColor = Color.rgb(100, 160, 220);
-    private int lineChartColor = Color.rgb(70, 170, 255);
     private int entryColor = Color.rgb(80, 180, 255);
-    private int stopColor = Color.rgb(255, 72, 87);
+    private int stopColor = Color.rgb(255, 140, 40);
     private int targetColor = Color.rgb(18, 209, 142);
+    private int volumeColor = Color.GREEN;
+    private int maColor = Color.BLUE;
+    private int bollingerColor = Color.CYAN;
+    private int macdColor = Color.BLUE;
+    private int rsiColor = Color.BLUE;
+    private int stochasticKColor = Color.YELLOW;
+    private int stochasticDColor = Color.RED;
+    private int fractalColor = Color.BLUE;
 
-    private static final float MIN_CANDLE_WIDTH = 5f;
-    private static final float MAX_CANDLE_WIDTH = 55f;
-    private static final float MIN_SPACING = 2f;
-    private static final float MAX_SPACING = 14f;
+    private float candleWidth = 18f;
+    private float spacing = 6f;
+    private float scrollOffset;
+    private float lastX;
+    private float lastY;
+    private boolean moving;
+    private boolean showCrosshair;
+    private float crosshairX = -1f;
+    private float crosshairY = -1f;
+    private int selectedCandleIndex = -1;
 
-    private static final float CHART_LEFT = 18f;
-    private static final float CHART_RIGHT = 96f;
-    private static final float CHART_TOP = 28f;
-    private static final float CHART_BOTTOM = 48f;
+    private double entry = Double.NaN;
+    private double stopLoss = Double.NaN;
+    private double tp1 = Double.NaN;
+    private double tp2 = Double.NaN;
+    private double tp3 = Double.NaN;
+    private Signal.Direction signalDirection = Signal.Direction.WAIT;
+
+    private String activeDrawingTool = "";
+    private float drawingStartX;
+    private float drawingStartY;
+    private boolean placingDrawing;
+    private DrawingObject selectedDrawing;
+
+    private boolean showBollinger = false;
+    private boolean showMovingAverage = false;
+    private boolean showMacd = false;
+    private boolean showRsi = false;
+    private boolean showStochastic = false;
+    private boolean showVolumes = false;
+    private boolean showFractals = false;
+
+    private int bollingerPeriod = 20;
+    private int movingAveragePeriod = 50;
+    private int macdFastPeriod = 12;
+    private int macdSlowPeriod = 26;
+    private int rsiPeriod = 14;
+    private int rsiUpperLevel = 70;
+    private int rsiLowerLevel = 30;
+    private int stochasticKPeriod = 5;
+    private int stochasticDPeriod = 3;
+    private int stochasticSlowing = 3;
+
+    private static final float LEFT = 18f;
+    private static final float RIGHT = 96f;
+    private static final float TOP = 28f;
+    private static final float BOTTOM = 48f;
+
+    private static class DrawingObject {
+        String type;
+        float x1, y1, x2, y2;
+        int color;
+        String note;
+
+        DrawingObject(String type, float x1, float y1,
+                      float x2, float y2, int color) {
+            this.type = type;
+            this.x1 = x1;
+            this.y1 = y1;
+            this.x2 = x2;
+            this.y2 = y2;
+            this.color = color;
+        }
+    }
 
     public ForexChartView(Context context) {
         super(context);
@@ -90,10 +130,15 @@ public class ForexChartView extends View {
                 context, new ScaleListener());
     }
 
+    // ---------------------------------------------------------
+    // CHART STYLE
+    // ---------------------------------------------------------
+
     public void setChartMode(int mode) {
-        if (mode < MODE_CANDLES || mode > MODE_BARS) return;
-        chartMode = mode;
-        invalidate();
+        if (mode >= MODE_CANDLES && mode <= MODE_BARS) {
+            chartMode = mode;
+            invalidate();
+        }
     }
 
     public int getChartMode() {
@@ -101,8 +146,7 @@ public class ForexChartView extends View {
     }
 
     public void setLineChartMode(boolean enabled) {
-        chartMode = enabled ? MODE_LINE : MODE_CANDLES;
-        invalidate();
+        setChartMode(enabled ? MODE_LINE : MODE_CANDLES);
     }
 
     public boolean isLineChartMode() {
@@ -110,8 +154,7 @@ public class ForexChartView extends View {
     }
 
     public void setBarChartMode(boolean enabled) {
-        chartMode = enabled ? MODE_BARS : MODE_CANDLES;
-        invalidate();
+        setChartMode(enabled ? MODE_BARS : MODE_CANDLES);
     }
 
     public boolean isBarChartMode() {
@@ -124,20 +167,42 @@ public class ForexChartView extends View {
         invalidate();
     }
 
-    public void setChartColors(
-            int background,
-            int grid,
-            int bull,
-            int bear,
-            int line,
-            int text) {
+    public void zoomIn() {
+        candleWidth = Math.min(55f, candleWidth + 4f);
+        updateSpacing();
+        clampScroll();
+        invalidate();
+    }
+
+    public void zoomOut() {
+        candleWidth = Math.max(5f, candleWidth - 4f);
+        updateSpacing();
+        clampScroll();
+        invalidate();
+    }
+
+    public void fitLatest() {
+        scrollOffset = 0;
+        invalidate();
+    }
+
+    private void updateSpacing() {
+        spacing = Math.max(2f, Math.min(14f, candleWidth * .30f));
+    }
+
+    // ---------------------------------------------------------
+    // COLORS
+    // ---------------------------------------------------------
+
+    public void setChartColors(int background, int grid,
+                               int bull, int bear, int line, int text) {
         backgroundColor = background;
         gridColor = grid;
         bullColor = bull;
         bearColor = bear;
         lineChartColor = line;
         textColor = text;
-        setBackgroundColor(backgroundColor);
+        setBackgroundColor(background);
         invalidate();
     }
 
@@ -184,29 +249,59 @@ public class ForexChartView extends View {
         invalidate();
     }
 
+    public void setColorRole(String role, int color) {
+        if (role == null) return;
+
+        switch (role.toUpperCase(Locale.US)) {
+            case "BACKGROUND": backgroundColor = color; setBackgroundColor(color); break;
+            case "FOREGROUND":
+            case "TEXT": textColor = color; break;
+            case "GRID": gridColor = color; break;
+            case "BULL":
+            case "BAR_UP": bullColor = color; break;
+            case "BEAR":
+            case "BAR_DOWN": bearColor = color; break;
+            case "LINE":
+            case "CHART_LINE": lineChartColor = color; break;
+            case "VOLUME":
+            case "VOLUMES": volumeColor = color; break;
+            case "INDICATOR":
+            case "MA": maColor = color; break;
+            case "BOLLINGER": bollingerColor = color; break;
+            case "MACD": macdColor = color; break;
+            case "RSI": rsiColor = color; break;
+            case "STOCHASTIC_K": stochasticKColor = color; break;
+            case "STOCHASTIC_D": stochasticDColor = color; break;
+            case "FRACTALS": fractalColor = color; break;
+            case "ENTRY": entryColor = color; break;
+            case "SL":
+            case "STOP": stopColor = color; break;
+            case "TP":
+            case "TARGET": targetColor = color; break;
+            case "BUY": indicatorBuyColor = color; break;
+            case "SELL": indicatorSellColor = color; break;
+        }
+        invalidate();
+    }
+
+    // ---------------------------------------------------------
+    // CANDLE DATA AND TRADE LEVELS
+    // ---------------------------------------------------------
+
     public void setCandles(List<Candle> newCandles) {
         candles.clear();
-        if (newCandles != null) {
-            candles.addAll(newCandles);
-        }
-
-        indicatorResults = ForexPilotIndicator.calculate(candles);
-        scrollOffset = 0f;
-        crosshairX = -1f;
-        crosshairY = -1f;
-        showCrosshair = false;
+        if (newCandles != null) candles.addAll(newCandles);
+        scrollOffset = 0;
         selectedCandleIndex = -1;
+        showCrosshair = false;
         invalidate();
     }
 
     public void clearChart() {
         candles.clear();
-        indicatorResults.clear();
-        scrollOffset = 0f;
-        crosshairX = -1f;
-        crosshairY = -1f;
-        showCrosshair = false;
+        scrollOffset = 0;
         selectedCandleIndex = -1;
+        showCrosshair = false;
         invalidate();
     }
 
@@ -226,841 +321,919 @@ public class ForexChartView extends View {
     }
 
     public void clearTradeLevels() {
-        entry = Double.NaN;
-        stopLoss = Double.NaN;
-        tp1 = Double.NaN;
-        tp2 = Double.NaN;
-        tp3 = Double.NaN;
+        entry = stopLoss = tp1 = tp2 = tp3 = Double.NaN;
         signalDirection = Signal.Direction.WAIT;
         invalidate();
     }
 
-    public void zoomIn() {
-        candleWidth = Math.min(MAX_CANDLE_WIDTH, candleWidth + 4f);
-        updateSpacing();
-        clampScroll();
+    // ---------------------------------------------------------
+    // INDICATOR CONTROLS
+    // ---------------------------------------------------------
+
+    public void setIndicatorEnabled(String name, boolean enabled) {
+        if (name == null) return;
+
+        switch (name.toUpperCase(Locale.US).replace(" ", "")) {
+            case "BOLLINGER":
+            case "BOLLINGERBANDS": showBollinger = enabled; break;
+            case "MA":
+            case "EMA":
+            case "MOVINGAVERAGE": showMovingAverage = enabled; break;
+            case "MACD": showMacd = enabled; break;
+            case "RSI": showRsi = enabled; break;
+            case "STOCHASTIC": showStochastic = enabled; break;
+            case "VOLUME":
+            case "VOLUMES": showVolumes = enabled; break;
+            case "FRACTALS": showFractals = enabled; break;
+        }
         invalidate();
     }
 
-    public void zoomOut() {
-        candleWidth = Math.max(MIN_CANDLE_WIDTH, candleWidth - 4f);
-        updateSpacing();
-        clampScroll();
+    public void setIndicatorPeriod(String name, int period) {
+        if (name == null || period < 1) return;
+
+        switch (name.toUpperCase(Locale.US).replace(" ", "")) {
+            case "BB":
+            case "BOLLINGER":
+            case "BOLLINGERBANDS": bollingerPeriod = period; break;
+            case "MA":
+            case "EMA":
+            case "MOVINGAVERAGE": movingAveragePeriod = period; break;
+            case "RSI": rsiPeriod = period; break;
+            case "STOCHASTIC":
+            case "STOCHASTIC_K": stochasticKPeriod = period; break;
+            case "STOCHASTIC_D": stochasticDPeriod = period; break;
+            case "STOCHASTIC_SLOWING": stochasticSlowing = period; break;
+            case "MACD_FAST": macdFastPeriod = period; break;
+            case "MACD_SLOW": macdSlowPeriod = period; break;
+        }
         invalidate();
     }
 
-    public void fitLatest() {
-        scrollOffset = 0f;
+    public void setRsiLevels(int upper, int lower) {
+        rsiUpperLevel = Math.max(51, Math.min(99, upper));
+        rsiLowerLevel = Math.max(1, Math.min(49, lower));
         invalidate();
     }
 
-    private void updateSpacing() {
-        spacing = Math.max(MIN_SPACING,
-                Math.min(MAX_SPACING, candleWidth * 0.30f));
+    public void setStochasticColors(int kColor, int dColor) {
+        stochasticKColor = kColor;
+        stochasticDColor = dColor;
+        invalidate();
     }
+
+    // ---------------------------------------------------------
+    // DRAWING TOOLS
+    // ---------------------------------------------------------
+
+    public void setDrawingTool(String tool) {
+        activeDrawingTool = tool == null ? "" : tool.trim();
+        placingDrawing = false;
+        selectedDrawing = null;
+        invalidate();
+    }
+
+    public String getDrawingTool() {
+        return activeDrawingTool;
+    }
+
+    public void cancelDrawingTool() {
+        activeDrawingTool = "";
+        placingDrawing = false;
+        selectedDrawing = null;
+        invalidate();
+    }
+
+    public void addDrawing(String type, float x1, float y1,
+                           float x2, float y2) {
+        drawings.add(new DrawingObject(
+                type, x1, y1, x2, y2, Color.YELLOW));
+        invalidate();
+    }
+
+    public void setDrawingColor(int color) {
+        if (selectedDrawing != null) {
+            selectedDrawing.color = color;
+            invalidate();
+        }
+    }
+
+    public void removeSelectedDrawing() {
+        if (selectedDrawing != null) {
+            drawings.remove(selectedDrawing);
+            selectedDrawing = null;
+            invalidate();
+        }
+    }
+
+    public void setSelectedDrawingNote(String note) {
+        if (selectedDrawing != null) {
+            selectedDrawing.note = note;
+            invalidate();
+        }
+    }
+
+    public void clearDrawings() {
+        // Drawing objects are cleared only when explicitly requested
+        // by the calling code. No Delete All UI button is provided.
+        drawings.clear();
+        selectedDrawing = null;
+        invalidate();
+    }
+
+    // ---------------------------------------------------------
+    // MAIN RENDERING
+    // ---------------------------------------------------------
 
     @Override
     protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
-        drawBackground(canvas);
+        canvas.drawColor(backgroundColor);
+        drawGrid(canvas);
 
         if (candles.isEmpty()) {
             drawMessage(canvas, "WAITING FOR LIVE CANDLE DATA");
+            drawObjects(canvas);
             return;
         }
 
-        drawChart(canvas);
+        int start = calculateStartIndex();
+        int end = Math.min(candles.size(), start + calculateVisibleCount());
+
+        double min = Double.MAX_VALUE;
+        double max = -Double.MAX_VALUE;
+
+        for (int i = start; i < end; i++) {
+            Candle c = candles.get(i);
+            if (!valid(c)) continue;
+            min = Math.min(min, c.getLow());
+            max = Math.max(max, c.getHigh());
+        }
+
+        if (!Double.isFinite(min) || !Double.isFinite(max)) {
+            drawMessage(canvas, "INVALID CANDLE DATA");
+            return;
+        }
+
+        if (max <= min) {
+            double pad = Math.max(Math.abs(max) * .001, .0001);
+            min -= pad;
+            max += pad;
+        }
+
+        double tMin = validMinTrade();
+        double tMax = validMaxTrade();
+        if (Double.isFinite(tMin)) min = Math.min(min, tMin);
+        if (Double.isFinite(tMax)) max = Math.max(max, tMax);
+
+        double pad = Math.max((max - min) * .08, .00001);
+        min -= pad;
+        max += pad;
+
+        double range = max - min;
+        float top = TOP;
+        float chartHeight = getHeight() - TOP - BOTTOM;
+
+        if (chartMode == MODE_LINE) {
+            drawCloseLine(canvas, start, end, min, range, top, chartHeight);
+        } else if (chartMode == MODE_BARS) {
+            drawBars(canvas, start, end, min, range, top, chartHeight);
+        } else {
+            drawCandles(canvas, start, end, min, range, top, chartHeight);
+        }
+
+        if (showMovingAverage) {
+            drawMovingAverage(canvas, start, end, min, range,
+                    top, chartHeight, movingAveragePeriod, maColor, 2.5f);
+        }
+
+        if (showBollinger) {
+            drawBollinger(canvas, start, end, min, range, top, chartHeight);
+        }
+
+        if (showMacd) {
+            drawMacd(canvas, start, end, min, range, top, chartHeight);
+        }
+
+        if (showRsi) {
+            drawRsi(canvas, start, end, min, range, top, chartHeight);
+        }
+
+        if (showStochastic) {
+            drawStochastic(canvas, start, end, min, range, top, chartHeight);
+        }
+
+        if (showVolumes) drawVolumes(canvas, start, end);
+        if (showFractals) drawFractals(canvas, start, end, min, range, top, chartHeight);
+
+        drawLatestPrice(canvas, end - 1, start, min, range, top, chartHeight);
+        drawTradeLines(canvas, min, max, range, top, chartHeight);
+        drawPriceScale(canvas, min, max);
+        drawTimeScale(canvas, start, end);
+        drawObjects(canvas);
+        drawSignalMarker(canvas, start, min, range, top, chartHeight);
 
         if (showCrosshair) drawCrosshair(canvas);
     }
 
-    private void drawBackground(Canvas canvas) {
-        canvas.drawColor(backgroundColor);
-
-        float right = getWidth() - CHART_RIGHT;
-        float bottom = getHeight() - CHART_BOTTOM;
-        float chartHeight = bottom - CHART_TOP;
+    private void drawGrid(Canvas canvas) {
+        float right = getWidth() - RIGHT;
+        float bottom = getHeight() - BOTTOM;
+        float h = bottom - TOP;
 
         paint.setStyle(Paint.Style.STROKE);
         paint.setStrokeWidth(1f);
         paint.setColor(gridColor);
 
         for (int i = 1; i < 6; i++) {
-            float y = CHART_TOP + chartHeight * i / 6f;
-            canvas.drawLine(CHART_LEFT, y, right, y, paint);
+            float y = TOP + h * i / 6f;
+            canvas.drawLine(LEFT, y, right, y, paint);
         }
-
-        float chartWidth = right - CHART_LEFT;
         for (int i = 1; i < 8; i++) {
-            float x = CHART_LEFT + chartWidth * i / 8f;
-            canvas.drawLine(x, CHART_TOP, x, bottom, paint);
+            float x = LEFT + (right - LEFT) * i / 8f;
+            canvas.drawLine(x, TOP, x, bottom, paint);
         }
-
         paint.setStyle(Paint.Style.FILL);
     }
 
-    private void drawChart(Canvas canvas) {
-        int width = getWidth();
-        int height = getHeight();
-        if (width <= 0 || height <= 0) return;
-
-        int startIndex = calculateStartIndex();
-        int visibleCount = calculateVisibleCount();
-        int endIndex = Math.min(candles.size(),
-                startIndex + visibleCount);
-
-        if (startIndex >= endIndex) return;
-
-        double minPrice = Double.MAX_VALUE;
-        double maxPrice = -Double.MAX_VALUE;
-
-        for (int i = startIndex; i < endIndex; i++) {
+    private void drawCandles(Canvas canvas, int start, int end,
+                             double min, double range,
+                             float top, float height) {
+        for (int i = start; i < end; i++) {
             Candle c = candles.get(i);
-            if (!isValidCandle(c)) continue;
-            minPrice = Math.min(minPrice, c.getLow());
-            maxPrice = Math.max(maxPrice, c.getHigh());
-        }
+            if (!valid(c)) continue;
 
-        for (int i = startIndex;
-             i < endIndex && i < indicatorResults.size(); i++) {
-            ForexPilotIndicator.Result result = indicatorResults.get(i);
-            if (result == null) continue;
+            float x = candleX(i, start);
+            if (!onScreen(x)) continue;
 
-            double value = result.getTrailingStop();
-            if (Double.isFinite(value)) {
-                minPrice = Math.min(minPrice, value);
-                maxPrice = Math.max(maxPrice, value);
-            }
-        }
+            float oy = priceY(c.getOpen(), min, range, top, height);
+            float cy = priceY(c.getClose(), min, range, top, height);
+            float hy = priceY(c.getHigh(), min, range, top, height);
+            float ly = priceY(c.getLow(), min, range, top, height);
 
-        if (!Double.isFinite(minPrice) || !Double.isFinite(maxPrice)) {
-            drawMessage(canvas, "INVALID CANDLE DATA");
-            return;
-        }
-
-        if (maxPrice <= minPrice) {
-            double center = (maxPrice + minPrice) / 2.0;
-            double pad = Math.max(Math.abs(center) * 0.001, 0.0001);
-            minPrice = center - pad;
-            maxPrice = center + pad;
-        }
-
-        double tradeMin = validMinTradeLevel();
-        double tradeMax = validMaxTradeLevel();
-
-        if (Double.isFinite(tradeMin)) minPrice = Math.min(minPrice, tradeMin);
-        if (Double.isFinite(tradeMax)) maxPrice = Math.max(maxPrice, tradeMax);
-
-        double rawRange = maxPrice - minPrice;
-        double padding = Math.max(rawRange * 0.08, 0.00001);
-        minPrice -= padding;
-        maxPrice += padding;
-
-        double priceRange = maxPrice - minPrice;
-        float chartTop = CHART_TOP;
-        float chartBottom = height - CHART_BOTTOM;
-        float chartHeight = chartBottom - chartTop;
-
-        if (chartMode == MODE_LINE) {
-            drawClosePriceLine(canvas, startIndex, endIndex,
-                    minPrice, priceRange, chartTop, chartHeight);
-        } else if (chartMode == MODE_BARS) {
-            drawBars(canvas, startIndex, endIndex,
-                    minPrice, priceRange, chartTop, chartHeight);
-        } else {
-            drawCandles(canvas, startIndex, endIndex,
-                    minPrice, priceRange, chartTop, chartHeight);
-        }
-
-        drawForexPilotIndicator(canvas, startIndex, endIndex,
-                minPrice, priceRange, chartTop, chartHeight);
-
-        drawLatestPriceLine(canvas, endIndex - 1, startIndex,
-                minPrice, priceRange, chartTop, chartHeight);
-
-        drawTradeLevels(canvas, minPrice, maxPrice, priceRange,
-                chartTop, chartHeight);
-
-        drawPriceScale(canvas, minPrice, maxPrice);
-        drawTimeScale(canvas, startIndex, endIndex);
-        drawChartBorder(canvas);
-        drawSignalMarker(canvas, startIndex, minPrice, priceRange,
-                chartTop, chartHeight);
-    }
-
-    private void drawCandles(Canvas canvas, int startIndex, int endIndex,
-                             double minPrice, double range,
-                             float chartTop, float chartHeight) {
-        for (int i = startIndex; i < endIndex; i++) {
-            Candle candle = candles.get(i);
-            if (!isValidCandle(candle)) continue;
-
-            float x = getCandleX(i, startIndex);
-            if (x < CHART_LEFT - candleWidth
-                    || x > getWidth() - CHART_RIGHT) continue;
-
-            float openY = priceToY(candle.getOpen(), minPrice, range,
-                    chartTop, chartHeight);
-            float closeY = priceToY(candle.getClose(), minPrice, range,
-                    chartTop, chartHeight);
-            float highY = priceToY(candle.getHigh(), minPrice, range,
-                    chartTop, chartHeight);
-            float lowY = priceToY(candle.getLow(), minPrice, range,
-                    chartTop, chartHeight);
-
-            paint.setColor(candle.getClose() >= candle.getOpen()
-                    ? bullColor : bearColor);
+            paint.setColor(c.getClose() >= c.getOpen() ? bullColor : bearColor);
+            paint.setStrokeWidth(Math.max(1f, candleWidth * .1f));
             paint.setStyle(Paint.Style.STROKE);
-            paint.setStrokeWidth(Math.max(1f,
-                    Math.min(2.5f, candleWidth * 0.10f)));
-            canvas.drawLine(x, highY, x, lowY, paint);
+            canvas.drawLine(x, hy, x, ly, paint);
 
             paint.setStyle(Paint.Style.FILL);
-            float bodyTop = Math.min(openY, closeY);
-            float bodyBottom = Math.max(openY, closeY);
-            float minimumBody = Math.max(2f,
-                    Math.min(5f, candleWidth * 0.25f));
+            float bw = Math.max(2f, candleWidth * .72f);
+            float y1 = Math.min(oy, cy);
+            float y2 = Math.max(oy, cy);
+            if (y2 - y1 < 2f) y2 = y1 + 2f;
 
-            if (bodyBottom - bodyTop < minimumBody) {
-                float center = (bodyTop + bodyBottom) / 2f;
-                bodyTop = center - minimumBody / 2f;
-                bodyBottom = center + minimumBody / 2f;
-            }
-
-            float bodyWidth = Math.max(2f, candleWidth * 0.72f);
-            RectF body = new RectF(x - bodyWidth / 2f, bodyTop,
-                    x + bodyWidth / 2f, bodyBottom);
-            canvas.drawRect(body, paint);
-
-            if (candleWidth >= 12f) {
-                paint.setStyle(Paint.Style.STROKE);
-                paint.setStrokeWidth(1f);
-                canvas.drawRect(body, paint);
-                paint.setStyle(Paint.Style.FILL);
-            }
+            canvas.drawRect(x - bw / 2f, y1, x + bw / 2f, y2, paint);
 
             if (i == selectedCandleIndex) {
                 paint.setStyle(Paint.Style.STROKE);
-                paint.setStrokeWidth(2f);
                 paint.setColor(Color.WHITE);
-                canvas.drawRect(body.left - 5f, body.top - 5f,
-                        body.right + 5f, body.bottom + 5f, paint);
+                canvas.drawRect(x - bw / 2f - 4, y1 - 4,
+                        x + bw / 2f + 4, y2 + 4, paint);
                 paint.setStyle(Paint.Style.FILL);
             }
         }
     }
 
-    private void drawBars(Canvas canvas, int startIndex, int endIndex,
-                          double minPrice, double range,
-                          float chartTop, float chartHeight) {
-        for (int i = startIndex; i < endIndex; i++) {
-            Candle candle = candles.get(i);
-            if (!isValidCandle(candle)) continue;
+    private void drawBars(Canvas canvas, int start, int end,
+                          double min, double range,
+                          float top, float height) {
+        paint.setStyle(Paint.Style.STROKE);
+        paint.setStrokeWidth(2f);
 
-            float x = getCandleX(i, startIndex);
-            if (x < CHART_LEFT - candleWidth
-                    || x > getWidth() - CHART_RIGHT) continue;
+        for (int i = start; i < end; i++) {
+            Candle c = candles.get(i);
+            if (!valid(c)) continue;
+            float x = candleX(i, start);
+            if (!onScreen(x)) continue;
 
-            float openY = priceToY(candle.getOpen(), minPrice, range,
-                    chartTop, chartHeight);
-            float closeY = priceToY(candle.getClose(), minPrice, range,
-                    chartTop, chartHeight);
-            float highY = priceToY(candle.getHigh(), minPrice, range,
-                    chartTop, chartHeight);
-            float lowY = priceToY(candle.getLow(), minPrice, range,
-                    chartTop, chartHeight);
+            paint.setColor(c.getClose() >= c.getOpen() ? bullColor : bearColor);
+            float oy = priceY(c.getOpen(), min, range, top, height);
+            float cy = priceY(c.getClose(), min, range, top, height);
+            float hy = priceY(c.getHigh(), min, range, top, height);
+            float ly = priceY(c.getLow(), min, range, top, height);
+            float tick = Math.max(3f, candleWidth * .25f);
 
-            paint.setColor(candle.getClose() >= candle.getOpen()
-                    ? bullColor : bearColor);
-            paint.setStyle(Paint.Style.STROKE);
-            paint.setStrokeWidth(2f);
-
-            canvas.drawLine(x, highY, x, lowY, paint);
-
-            float tick = Math.max(3f, candleWidth * 0.25f);
-            canvas.drawLine(x - tick, openY, x, openY, paint);
-            canvas.drawLine(x, closeY, x + tick, closeY, paint);
+            canvas.drawLine(x, hy, x, ly, paint);
+            canvas.drawLine(x - tick, oy, x, oy, paint);
+            canvas.drawLine(x, cy, x + tick, cy, paint);
         }
         paint.setStyle(Paint.Style.FILL);
     }
 
-    private void drawClosePriceLine(Canvas canvas, int startIndex,
-                                    int endIndex, double minPrice,
-                                    double range, float chartTop,
-                                    float chartHeight) {
+    private void drawCloseLine(Canvas canvas, int start, int end,
+                               double min, double range,
+                               float top, float height) {
         Path path = new Path();
-        boolean started = false;
+        boolean begun = false;
 
-        for (int i = startIndex; i < endIndex; i++) {
-            Candle candle = candles.get(i);
-            if (!isValidCandle(candle)) {
-                started = false;
+        for (int i = start; i < end; i++) {
+            Candle c = candles.get(i);
+            if (!valid(c)) {
+                begun = false;
                 continue;
             }
 
-            float x = getCandleX(i, startIndex);
-            float y = priceToY(candle.getClose(), minPrice, range,
-                    chartTop, chartHeight);
-
-            if (!started) {
+            float x = candleX(i, start);
+            float y = priceY(c.getClose(), min, range, top, height);
+            if (!begun) {
                 path.moveTo(x, y);
-                started = true;
+                begun = true;
             } else {
                 path.lineTo(x, y);
             }
         }
 
-        paint.setStyle(Paint.Style.STROKE);
-        paint.setStrokeWidth(2.5f);
-        paint.setStrokeCap(Paint.Cap.ROUND);
-        paint.setStrokeJoin(Paint.Join.ROUND);
         paint.setColor(lineChartColor);
+        paint.setStyle(Paint.Style.STROKE);
+        paint.setStrokeWidth(2.5f);
         canvas.drawPath(path, paint);
-        paint.setStrokeCap(Paint.Cap.BUTT);
         paint.setStyle(Paint.Style.FILL);
-
-        if (endIndex > startIndex) {
-            Candle latest = candles.get(endIndex - 1);
-            if (isValidCandle(latest)) {
-                float x = getCandleX(endIndex - 1, startIndex);
-                float y = priceToY(latest.getClose(), minPrice, range,
-                        chartTop, chartHeight);
-                paint.setColor(lineChartColor);
-                canvas.drawCircle(x, y, 4f, paint);
-            }
-        }
     }
 
-    private void drawForexPilotIndicator(Canvas canvas, int startIndex,
-                                         int endIndex, double minPrice,
-                                         double range, float chartTop,
-                                         float chartHeight) {
-        if (indicatorResults == null || indicatorResults.isEmpty()) return;
+    // ---------------------------------------------------------
+    // INDICATOR CALCULATIONS AND RENDERING
+    // ---------------------------------------------------------
 
+    private void drawMovingAverage(Canvas canvas, int start, int end,
+                                   double min, double range, float top,
+                                   float height, int period, int color,
+                                   float stroke) {
+        drawCalculatedLine(canvas, start, end, min, range, top, height,
+                color, stroke, i -> movingAverage(i, period));
+    }
+
+    private interface ValueFunction {
+        double value(int index);
+    }
+
+    private void drawCalculatedLine(Canvas canvas, int start, int end,
+                                    double min, double range, float top,
+                                    float height, int color, float stroke,
+                                    ValueFunction function) {
         Path path = new Path();
-        boolean pathStarted = false;
+        boolean begun = false;
 
-        for (int i = startIndex;
-             i < endIndex && i < indicatorResults.size(); i++) {
-            ForexPilotIndicator.Result result = indicatorResults.get(i);
-            if (result == null) {
-                pathStarted = false;
-                continue;
-            }
-
-            double value = result.getTrailingStop();
+        for (int i = start; i < end; i++) {
+            double value = function.value(i);
             if (!Double.isFinite(value)) {
-                pathStarted = false;
+                begun = false;
                 continue;
             }
 
-            float x = getCandleX(i, startIndex);
-            float y = priceToY(value, minPrice, range,
-                    chartTop, chartHeight);
+            float x = candleX(i, start);
+            float y = priceY(value, min, range, top, height);
 
-            if (!pathStarted) {
+            if (!begun) {
                 path.moveTo(x, y);
-                pathStarted = true;
+                begun = true;
             } else {
                 path.lineTo(x, y);
             }
         }
 
+        paint.setColor(color);
         paint.setStyle(Paint.Style.STROKE);
-        paint.setStrokeWidth(2.5f);
-        paint.setStrokeCap(Paint.Cap.ROUND);
-        paint.setStrokeJoin(Paint.Join.ROUND);
-        paint.setColor(indicatorLineColor);
+        paint.setStrokeWidth(stroke);
         canvas.drawPath(path, paint);
-        paint.setStrokeCap(Paint.Cap.BUTT);
         paint.setStyle(Paint.Style.FILL);
+    }
 
-        for (int i = startIndex;
-             i < endIndex && i < indicatorResults.size(); i++) {
-            ForexPilotIndicator.Result result = indicatorResults.get(i);
-            if (result == null) continue;
+    private double movingAverage(int index, int period) {
+        if (period < 1 || index < period - 1) return Double.NaN;
+        double sum = 0;
+        for (int i = index - period + 1; i <= index; i++) {
+            sum += candles.get(i).getClose();
+        }
+        return sum / period;
+    }
 
-            ForexPilotIndicator.SignalType type = result.getSignalType();
-            if (type == ForexPilotIndicator.SignalType.NONE) continue;
+    private double standardDeviation(int index, int period) {
+        double avg = movingAverage(index, period);
+        if (!Double.isFinite(avg)) return Double.NaN;
 
-            Candle candle = candles.get(i);
-            if (!isValidCandle(candle)) continue;
+        double sum = 0;
+        for (int i = index - period + 1; i <= index; i++) {
+            double difference = candles.get(i).getClose() - avg;
+            sum += difference * difference;
+        }
+        return Math.sqrt(sum / period);
+    }
 
-            float x = getCandleX(i, startIndex);
-            if (x < CHART_LEFT - 35f
-                    || x > getWidth() - CHART_RIGHT + 35f) continue;
+    private void drawBollinger(Canvas canvas, int start, int end,
+                               double min, double range, float top,
+                               float height) {
+        drawCalculatedLine(canvas, start, end, min, range, top, height,
+                bollingerColor, 2f, i -> movingAverage(i, bollingerPeriod));
 
-            boolean buy = type == ForexPilotIndicator.SignalType.BUY;
-            double price = buy ? candle.getLow() : candle.getHigh();
-            float y = priceToY(price, minPrice, range,
-                    chartTop, chartHeight);
-            drawIndicatorSignalMarker(canvas, x, y, buy);
+        drawCalculatedLine(canvas, start, end, min, range, top, height,
+                bollingerColor, 1.5f, i -> {
+                    double ma = movingAverage(i, bollingerPeriod);
+                    double sd = standardDeviation(i, bollingerPeriod);
+                    return Double.isFinite(ma) && Double.isFinite(sd)
+                            ? ma + 2 * sd : Double.NaN;
+                });
+
+        drawCalculatedLine(canvas, start, end, min, range, top, height,
+                bollingerColor, 1.5f, i -> {
+                    double ma = movingAverage(i, bollingerPeriod);
+                    double sd = standardDeviation(i, bollingerPeriod);
+                    return Double.isFinite(ma) && Double.isFinite(sd)
+                            ? ma - 2 * sd : Double.NaN;
+                });
+    }
+
+    private double ema(int index, int period) {
+        if (period < 1 || index < period - 1) return Double.NaN;
+        double value = 0;
+        for (int i = index - period + 1; i <= index; i++) {
+            value += candles.get(i).getClose();
+        }
+        value /= period;
+
+        double multiplier = 2.0 / (period + 1);
+        for (int i = index - period + 2; i <= index; i++) {
+            value = (candles.get(i).getClose() - value) * multiplier + value;
+        }
+        return value;
+    }
+
+    private double macd(int index) {
+        double fast = ema(index, macdFastPeriod);
+        double slow = ema(index, macdSlowPeriod);
+        if (!Double.isFinite(fast) || !Double.isFinite(slow)) {
+            return Double.NaN;
+        }
+        return fast - slow;
+    }
+
+    private void drawMacd(Canvas canvas, int start, int end,
+                          double min, double range, float top,
+                          float height) {
+        drawCalculatedLine(canvas, start, end, min, range, top, height,
+                macdColor, 2f, this::macd);
+    }
+
+    private double rsi(int index) {
+        if (rsiPeriod < 1 || index < rsiPeriod) return Double.NaN;
+        double gains = 0;
+        double losses = 0;
+
+        for (int i = index - rsiPeriod + 1; i <= index; i++) {
+            double change = candles.get(i).getClose()
+                    - candles.get(i - 1).getClose();
+            if (change > 0) gains += change;
+            else losses -= change;
+        }
+
+        if (losses == 0) return 100;
+        double rs = (gains / rsiPeriod) / (losses / rsiPeriod);
+        return 100 - 100 / (1 + rs);
+    }
+
+    private void drawRsi(Canvas canvas, int start, int end,
+                         double min, double range, float top,
+                         float height) {
+        drawCalculatedLine(canvas, start, end, min, range, top, height,
+                rsiColor, 2f, i -> {
+                    double value = rsi(i);
+                    if (!Double.isFinite(value)) return Double.NaN;
+                    return min + (maxSafe(range) * value / 100.0);
+                });
+    }
+
+    private double stochastic(int index) {
+        if (index < stochasticKPeriod - 1) return Double.NaN;
+        double highest = -Double.MAX_VALUE;
+        double lowest = Double.MAX_VALUE;
+
+        for (int i = index - stochasticKPeriod + 1; i <= index; i++) {
+            highest = Math.max(highest, candles.get(i).getHigh());
+            lowest = Math.min(lowest, candles.get(i).getLow());
+        }
+
+        if (highest == lowest) return 50;
+        return 100 * (candles.get(index).getClose() - lowest)
+                / (highest - lowest);
+    }
+
+    private double stochasticD(int index) {
+        if (index < stochasticDPeriod - 1) return Double.NaN;
+        double sum = 0;
+        for (int i = index - stochasticDPeriod + 1; i <= index; i++) {
+            double value = stochastic(i);
+            if (!Double.isFinite(value)) return Double.NaN;
+            sum += value;
+        }
+        return sum / stochasticDPeriod;
+    }
+
+    private void drawStochastic(Canvas canvas, int start, int end,
+                                double min, double range, float top,
+                                float height) {
+        drawCalculatedLine(canvas, start, end, min, range, top, height,
+                stochasticKColor, 2f, i -> {
+                    double value = stochastic(i);
+                    return Double.isFinite(value)
+                            ? min + maxSafe(range) * value / 100.0
+                            : Double.NaN;
+                });
+
+        drawCalculatedLine(canvas, start, end, min, range, top, height,
+                stochasticDColor, 2f, i -> {
+                    double value = stochasticD(i);
+                    return Double.isFinite(value)
+                            ? min + maxSafe(range) * value / 100.0
+                            : Double.NaN;
+                });
+    }
+
+    private void drawVolumes(Canvas canvas, int start, int end) {
+        double maxVolume = 0;
+        for (int i = start; i < end; i++) {
+            maxVolume = Math.max(maxVolume, candles.get(i).getVolume());
+        }
+        if (maxVolume <= 0) return;
+
+        float bottom = getHeight() - BOTTOM;
+        float area = Math.max(30f, getHeight() * .15f);
+
+        for (int i = start; i < end; i++) {
+            Candle c = candles.get(i);
+            float x = candleX(i, start);
+            if (!onScreen(x)) continue;
+
+            float h = (float) (Math.max(0, c.getVolume()) / maxVolume * area);
+            paint.setColor(volumeColor);
+            canvas.drawRect(x - candleWidth * .25f, bottom - h,
+                    x + candleWidth * .25f, bottom, paint);
         }
     }
 
-    private void drawIndicatorSignalMarker(Canvas canvas, float x,
-                                           float candleY, boolean buy) {
-        float markerY = buy ? candleY + 27f : candleY - 27f;
-        paint.setStyle(Paint.Style.FILL);
-        paint.setColor(buy ? indicatorBuyColor : indicatorSellColor);
+    private void drawFractals(Canvas canvas, int start, int end,
+                              double min, double range, float top,
+                              float height) {
+        for (int i = Math.max(2, start); i < Math.min(end, candles.size() - 2); i++) {
+            Candle c = candles.get(i);
+            boolean high = true;
+            boolean low = true;
 
-        Path arrow = new Path();
-        if (buy) {
-            arrow.moveTo(x, markerY - 14f);
-            arrow.lineTo(x - 9f, markerY - 2f);
-            arrow.lineTo(x - 4f, markerY - 2f);
-            arrow.lineTo(x - 4f, markerY + 12f);
-            arrow.lineTo(x + 4f, markerY + 12f);
-            arrow.lineTo(x + 4f, markerY - 2f);
-            arrow.lineTo(x + 9f, markerY - 2f);
-        } else {
-            arrow.moveTo(x, markerY + 14f);
-            arrow.lineTo(x - 9f, markerY + 2f);
-            arrow.lineTo(x - 4f, markerY + 2f);
-            arrow.lineTo(x - 4f, markerY - 12f);
-            arrow.lineTo(x + 4f, markerY - 12f);
-            arrow.lineTo(x + 4f, markerY + 2f);
-            arrow.lineTo(x + 9f, markerY + 2f);
+            for (int j = i - 2; j <= i + 2; j++) {
+                if (j == i) continue;
+                high &= c.getHigh() > candles.get(j).getHigh();
+                low &= c.getLow() < candles.get(j).getLow();
+            }
+
+            float x = candleX(i, start);
+            if (high) {
+                float y = priceY(c.getHigh(), min, range, top, height) - 8;
+                paint.setColor(fractalColor);
+                canvas.drawCircle(x, y, 4, paint);
+            }
+            if (low) {
+                float y = priceY(c.getLow(), min, range, top, height) + 8;
+                paint.setColor(fractalColor);
+                canvas.drawCircle(x, y, 4, paint);
+            }
         }
-        arrow.close();
-        canvas.drawPath(arrow, paint);
-
-        paint.setTextAlign(Paint.Align.CENTER);
-        paint.setTextSize(12f);
-        paint.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
-        paint.setColor(Color.WHITE);
-        canvas.drawText(buy ? "BUY" : "SELL", x,
-                buy ? markerY + 29f : markerY - 20f, paint);
-        paint.setTypeface(android.graphics.Typeface.DEFAULT);
-        paint.setTextAlign(Paint.Align.LEFT);
     }
 
-    private void drawLatestPriceLine(Canvas canvas, int latestIndex,
-                                     int startIndex, double minPrice,
-                                     double range, float chartTop,
-                                     float chartHeight) {
-        if (latestIndex < startIndex || latestIndex >= candles.size()) return;
+    private double maxSafe(double value) {
+        return Double.isFinite(value) && value > 0 ? value : 1;
+    }
 
-        Candle latest = candles.get(latestIndex);
-        if (!isValidCandle(latest)) return;
+    // ---------------------------------------------------------
+    // PRICE, TRADE LEVELS, OBJECTS AND MARKERS
+    // ---------------------------------------------------------
 
-        float y = priceToY(latest.getClose(), minPrice, range,
-                chartTop, chartHeight);
-        if (y < CHART_TOP || y > getHeight() - CHART_BOTTOM) return;
+    private void drawLatestPrice(Canvas canvas, int index, int start,
+                                 double min, double range, float top,
+                                 float height) {
+        if (index < start || index >= candles.size()) return;
+        Candle c = candles.get(index);
+        if (!valid(c)) return;
 
+        float y = priceY(c.getClose(), min, range, top, height);
         paint.setColor(priceLineColor);
-        paint.setStrokeWidth(1f);
         paint.setStyle(Paint.Style.STROKE);
+        paint.setStrokeWidth(1f);
 
-        float x1 = CHART_LEFT;
-        float x2 = getWidth() - CHART_RIGHT;
-        for (float x = x1; x < x2; x += 12f) {
-            canvas.drawLine(x, y, Math.min(x + 6f, x2), y, paint);
+        for (float x = LEFT; x < getWidth() - RIGHT; x += 12f) {
+            canvas.drawLine(x, y, Math.min(x + 6f, getWidth() - RIGHT),
+                    y, paint);
         }
 
         paint.setStyle(Paint.Style.FILL);
         paint.setColor(Color.rgb(30, 50, 70));
-        canvas.drawRect(new RectF(getWidth() - CHART_RIGHT + 2f,
-                y - 13f, getWidth() - 2f, y + 13f), paint);
+        canvas.drawRect(getWidth() - RIGHT + 2, y - 13,
+                getWidth() - 2, y + 13, paint);
         paint.setColor(Color.WHITE);
-        paint.setTextSize(15f);
-        canvas.drawText(formatPrice(latest.getClose()),
-                getWidth() - CHART_RIGHT + 7f, y + 5f, paint);
+        paint.setTextSize(14);
+        canvas.drawText(formatPrice(c.getClose()),
+                getWidth() - RIGHT + 6, y + 5, paint);
     }
 
-    private void drawChartBorder(Canvas canvas) {
-        paint.setStyle(Paint.Style.STROKE);
-        paint.setStrokeWidth(1f);
-        paint.setColor(borderColor);
-        canvas.drawRect(CHART_LEFT, CHART_TOP,
-                getWidth() - CHART_RIGHT,
-                getHeight() - CHART_BOTTOM, paint);
-        paint.setStyle(Paint.Style.FILL);
-    }
-
-    private void drawTradeLevels(Canvas canvas, double minPrice,
-                                 double maxPrice, double range,
-                                 float chartTop, float chartHeight) {
-        drawTradeLine(canvas, entry, "ENTRY", entryColor,
-                minPrice, maxPrice, range, chartTop, chartHeight);
-        drawTradeLine(canvas, stopLoss, "SL", stopColor,
-                minPrice, maxPrice, range, chartTop, chartHeight);
-        drawTradeLine(canvas, tp1, "TP1", targetColor,
-                minPrice, maxPrice, range, chartTop, chartHeight);
-        drawTradeLine(canvas, tp2, "TP2", targetColor,
-                minPrice, maxPrice, range, chartTop, chartHeight);
-        drawTradeLine(canvas, tp3, "TP3", targetColor,
-                minPrice, maxPrice, range, chartTop, chartHeight);
+    private void drawTradeLines(Canvas canvas, double min, double max,
+                                double range, float top, float height) {
+        drawTradeLine(canvas, entry, "ENTRY", entryColor, min, max, range, top, height);
+        drawTradeLine(canvas, stopLoss, "SL", stopColor, min, max, range, top, height);
+        drawTradeLine(canvas, tp1, "TP1", targetColor, min, max, range, top, height);
+        drawTradeLine(canvas, tp2, "TP2", targetColor, min, max, range, top, height);
+        drawTradeLine(canvas, tp3, "TP3", targetColor, min, max, range, top, height);
     }
 
     private void drawTradeLine(Canvas canvas, double price, String label,
-                               int color, double minPrice, double maxPrice,
-                               double range, float chartTop,
-                               float chartHeight) {
-        if (!Double.isFinite(price)
-                || price < minPrice || price > maxPrice) return;
+                               int color, double min, double max,
+                               double range, float top, float height) {
+        if (!Double.isFinite(price) || price < min || price > max) return;
 
-        float y = priceToY(price, minPrice, range,
-                chartTop, chartHeight);
+        float y = priceY(price, min, range, top, height);
         paint.setColor(color);
         paint.setStrokeWidth(1.5f);
         paint.setStyle(Paint.Style.STROKE);
-        canvas.drawLine(CHART_LEFT, y,
-                getWidth() - CHART_RIGHT, y, paint);
-
+        canvas.drawLine(LEFT, y, getWidth() - RIGHT, y, paint);
         paint.setStyle(Paint.Style.FILL);
-        paint.setTextSize(17f);
-        canvas.drawText(label, getWidth() - CHART_RIGHT + 7f,
-                y - 4f, paint);
+        paint.setTextSize(14);
+        canvas.drawText(label, getWidth() - RIGHT + 6, y - 4, paint);
     }
 
-    private void drawSignalMarker(Canvas canvas, int startIndex,
-                                 double minPrice, double range,
-                                 float chartTop, float chartHeight) {
+    private void drawSignalMarker(Canvas canvas, int start,
+                                  double min, double range,
+                                  float top, float height) {
         if (signalDirection == Signal.Direction.WAIT || candles.isEmpty()) return;
+        int index = candles.size() - 1;
+        if (index < start) return;
 
-        int lastIndex = candles.size() - 1;
-        if (lastIndex < startIndex) return;
-
-        Candle last = candles.get(lastIndex);
-        if (!isValidCandle(last)) return;
-
-        float x = getCandleX(lastIndex, startIndex);
-        if (x < CHART_LEFT || x > getWidth() - CHART_RIGHT) return;
+        Candle c = candles.get(index);
+        if (!valid(c)) return;
 
         boolean buy = signalDirection == Signal.Direction.BUY;
-        double price = buy ? last.getLow() : last.getHigh();
-        float y = priceToY(price, minPrice, range,
-                chartTop, chartHeight);
-        float markerY = buy ? y + 20f : y - 20f;
-
-        paint.setStyle(Paint.Style.FILL);
-        paint.setColor(buy ? bullColor : bearColor);
-        canvas.drawCircle(x, markerY, 10f, paint);
+        float x = candleX(index, start);
+        float y = priceY(buy ? c.getLow() : c.getHigh(),
+                min, range, top, height);
+        paint.setColor(buy ? indicatorBuyColor : indicatorSellColor);
+        canvas.drawCircle(x, y + (buy ? 20 : -20), 9, paint);
         paint.setColor(Color.WHITE);
-        paint.setTextSize(14f);
         paint.setTextAlign(Paint.Align.CENTER);
-        canvas.drawText(buy ? "B" : "S", x, markerY + 5f, paint);
+        paint.setTextSize(12);
+        canvas.drawText(buy ? "B" : "S", x, y + (buy ? 24 : -16), paint);
+        paint.setTextAlign(Paint.Align.LEFT);
+    }
+
+    private void drawObjects(Canvas canvas) {
+        for (DrawingObject d : drawings) {
+            paint.setColor(d.color);
+            paint.setStrokeWidth(selectedDrawing == d ? 3f : 2f);
+            paint.setStyle(Paint.Style.STROKE);
+
+            String type = d.type.toUpperCase(Locale.US);
+            switch (type) {
+                case "VERTICAL":
+                case "VERTICAL LINE":
+                    canvas.drawLine(d.x1, TOP, d.x1,
+                            getHeight() - BOTTOM, paint);
+                    break;
+                case "HORIZONTAL":
+                case "HORIZONTAL LINE":
+                    canvas.drawLine(LEFT, d.y1,
+                            getWidth() - RIGHT, d.y1, paint);
+                    break;
+                case "RECTANGLE":
+                case "RECT":
+                    canvas.drawRect(new RectF(d.x1, d.y1, d.x2, d.y2), paint);
+                    break;
+                case "ELLIPSE":
+                case "CIRCLE":
+                    canvas.drawOval(new RectF(d.x1, d.y1, d.x2, d.y2), paint);
+                    break;
+                case "TRIANGLE": {
+                    Path p = new Path();
+                    p.moveTo((d.x1 + d.x2) / 2f, d.y1);
+                    p.lineTo(d.x1, d.y2);
+                    p.lineTo(d.x2, d.y2);
+                    p.close();
+                    canvas.drawPath(p, paint);
+                    break;
+                }
+                case "ARROWED":
+                case "ARROW": {
+                    canvas.drawLine(d.x1, d.y1, d.x2, d.y2, paint);
+                    float angle = (float) Math.atan2(d.y2 - d.y1, d.x2 - d.x1);
+                    float size = 12f;
+                    canvas.drawLine(d.x2, d.y2,
+                            d.x2 - size * (float) Math.cos(angle - .5),
+                            d.y2 - size * (float) Math.sin(angle - .5), paint);
+                    canvas.drawLine(d.x2, d.y2,
+                            d.x2 - size * (float) Math.cos(angle + .5),
+                            d.y2 - size * (float) Math.sin(angle + .5), paint);
+                    break;
+                }
+                case "FIBONACCI RETRACEMENT":
+                case "FIBONACCI": {
+                    float[] levels = {0f, .236f, .382f, .5f, .618f, .786f, 1f};
+                    for (float level : levels) {
+                        float y = d.y1 + (d.y2 - d.y1) * level;
+                        canvas.drawLine(Math.min(d.x1, d.x2), y,
+                                Math.max(d.x1, d.x2), y, paint);
+                    }
+                    break;
+                }
+                case "CHANNEL":
+                case "EQUidistant":
+                case "EQUI DISTANT":
+                    canvas.drawLine(d.x1, d.y1, d.x2, d.y2, paint);
+                    canvas.drawLine(d.x1, d.y1 - 25, d.x2, d.y2 - 25, paint);
+                    canvas.drawLine(d.x1, d.y1 + 25, d.x2, d.y2 + 25, paint);
+                    break;
+                case "GANN FAN":
+                case "FAN":
+                    canvas.drawLine(d.x1, d.y1, d.x2, d.y2, paint);
+                    canvas.drawLine(d.x1, d.y1, d.x2, d.y1, paint);
+                    canvas.drawLine(d.x1, d.y1, d.x1, d.y2, paint);
+                    canvas.drawLine(d.x1, d.y1, d.x2,
+                            d.y1 + (d.y2 - d.y1) * .5f, paint);
+                    break;
+                case "NOTE":
+                case "NOTES":
+                    paint.setStyle(Paint.Style.FILL);
+                    canvas.drawText(d.note == null ? "Note" : d.note,
+                            d.x1, d.y1, paint);
+                    break;
+                default:
+                    canvas.drawLine(d.x1, d.y1, d.x2, d.y2, paint);
+                    break;
+            }
+            paint.setStyle(Paint.Style.FILL);
+        }
+    }
+
+    // ---------------------------------------------------------
+    // SCALES AND CROSSHAIR
+    // ---------------------------------------------------------
+
+    private void drawPriceScale(Canvas canvas, double min, double max) {
+        paint.setColor(textColor);
+        paint.setTextSize(13);
+        float height = getHeight() - TOP - BOTTOM;
+
+        for (int i = 0; i <= 6; i++) {
+            double price = min + (max - min) * i / 6.0;
+            float y = TOP + height * (1 - i / 6f);
+            canvas.drawText(formatPrice(price),
+                    getWidth() - RIGHT + 7, y + 5, paint);
+        }
+    }
+
+    private void drawTimeScale(Canvas canvas, int start, int end) {
+        if (end <= start) return;
+
+        float bottom = getHeight() - BOTTOM;
+        int step = Math.max(1, (end - start) / 5);
+        paint.setColor(textColor);
+        paint.setTextSize(11);
+        paint.setTextAlign(Paint.Align.CENTER);
+
+        for (int i = start; i < end; i += step) {
+            float x = candleX(i, start);
+            if (x < LEFT || x > getWidth() - RIGHT) continue;
+            canvas.drawText(formatTime(candles.get(i).getTimestamp()),
+                    x, bottom + 21, paint);
+        }
         paint.setTextAlign(Paint.Align.LEFT);
     }
 
     private void drawCrosshair(Canvas canvas) {
-        float right = getWidth() - CHART_RIGHT;
-        float bottom = getHeight() - CHART_BOTTOM;
+        if (crosshairX < LEFT || crosshairX > getWidth() - RIGHT
+                || crosshairY < TOP || crosshairY > getHeight() - BOTTOM) return;
 
-        if (crosshairX < CHART_LEFT || crosshairX > right
-                || crosshairY < CHART_TOP || crosshairY > bottom) return;
-
+        paint.setColor(Color.LTGRAY);
+        paint.setStrokeWidth(1);
         paint.setStyle(Paint.Style.STROKE);
-        paint.setStrokeWidth(1f);
-        paint.setColor(crosshairColor);
-        canvas.drawLine(CHART_LEFT, crosshairY, right, crosshairY, paint);
-        canvas.drawLine(crosshairX, CHART_TOP, crosshairX, bottom, paint);
+        canvas.drawLine(LEFT, crosshairY, getWidth() - RIGHT, crosshairY, paint);
+        canvas.drawLine(crosshairX, TOP, crosshairX,
+                getHeight() - BOTTOM, paint);
         paint.setStyle(Paint.Style.FILL);
 
         int index = selectedCandleIndex;
-        if (index < 0 || index >= candles.size()) {
-            index = getCandleIndexFromX(crosshairX);
-        }
-
         if (index >= 0 && index < candles.size()) {
-            Candle candle = candles.get(index);
-            if (isValidCandle(candle)) {
-                drawCandleInfo(canvas, candle);
-                drawCrosshairPrice(canvas);
-                drawCrosshairTime(canvas, candle);
-                return;
-            }
+            Candle c = candles.get(index);
+            paint.setColor(Color.WHITE);
+            paint.setTextSize(12);
+            canvas.drawText("O " + formatPrice(c.getOpen())
+                            + " H " + formatPrice(c.getHigh())
+                            + " L " + formatPrice(c.getLow())
+                            + " C " + formatPrice(c.getClose()),
+                    LEFT + 4, TOP + 16, paint);
         }
-        drawCrosshairPrice(canvas);
     }
 
-    private void drawCrosshairPrice(Canvas canvas) {
-        float right = getWidth() - CHART_RIGHT;
-        double price = getPriceFromCrosshair();
-
-        paint.setColor(Color.rgb(25, 35, 48));
-        canvas.drawRect(new RectF(right + 2f, crosshairY - 16f,
-                getWidth() - 2f, crosshairY + 16f), paint);
-        paint.setColor(Color.WHITE);
-        paint.setTextSize(15f);
-        canvas.drawText(formatPrice(price), right + 7f,
-                crosshairY + 5f, paint);
-    }
-
-    private void drawCrosshairTime(Canvas canvas, Candle candle) {
-        float right = getWidth() - CHART_RIGHT;
-        float bottom = getHeight() - CHART_BOTTOM;
-        String time = formatCandleTime(candle.getTimestamp());
-        float boxWidth = 118f;
-        float left = Math.max(CHART_LEFT,
-                Math.min(crosshairX - boxWidth / 2f, right - boxWidth));
-
-        paint.setColor(Color.rgb(25, 35, 48));
-        canvas.drawRect(new RectF(left, bottom + 3f,
-                left + boxWidth, bottom + 29f), paint);
-        paint.setColor(Color.WHITE);
-        paint.setTextSize(13f);
+    private void drawMessage(Canvas canvas, String message) {
+        paint.setColor(textColor);
+        paint.setTextSize(18);
         paint.setTextAlign(Paint.Align.CENTER);
-        canvas.drawText(time, left + boxWidth / 2f,
-                bottom + 21f, paint);
+        canvas.drawText(message, getWidth() / 2f, getHeight() / 2f, paint);
         paint.setTextAlign(Paint.Align.LEFT);
     }
 
-    private void drawCandleInfo(Canvas canvas, Candle candle) {
-        float left = CHART_LEFT + 8f;
-        float top = CHART_TOP + 8f;
-        float width = 178f;
-        float height = 108f;
-
-        paint.setColor(Color.rgb(18, 27, 40));
-        paint.setStyle(Paint.Style.FILL);
-        canvas.drawRoundRect(new RectF(left, top, left + width,
-                top + height), 8f, 8f, paint);
-
-        paint.setColor(Color.rgb(80, 95, 115));
-        paint.setStyle(Paint.Style.STROKE);
-        paint.setStrokeWidth(1f);
-        canvas.drawRoundRect(new RectF(left, top, left + width,
-                top + height), 8f, 8f, paint);
-
-        paint.setStyle(Paint.Style.FILL);
-        paint.setTextSize(13f);
-        paint.setColor(textColor);
-        canvas.drawText("CANDLE", left + 10f, top + 19f, paint);
-
-        paint.setTextSize(12f);
-        paint.setColor(Color.WHITE);
-        canvas.drawText("O  " + formatPrice(candle.getOpen()),
-                left + 10f, top + 39f, paint);
-        canvas.drawText("H  " + formatPrice(candle.getHigh()),
-                left + 10f, top + 57f, paint);
-        canvas.drawText("L  " + formatPrice(candle.getLow()),
-                left + 10f, top + 75f, paint);
-        canvas.drawText("C  " + formatPrice(candle.getClose()),
-                left + 10f, top + 93f, paint);
-    }
-
-    private double getPriceFromCrosshair() {
-        if (candles.isEmpty()) return Double.NaN;
-
-        int start = calculateStartIndex();
-        int end = Math.min(candles.size(),
-                start + calculateVisibleCount());
-        double min = Double.MAX_VALUE;
-        double max = -Double.MAX_VALUE;
-
-        for (int i = start; i < end; i++) {
-            Candle candle = candles.get(i);
-            if (!isValidCandle(candle)) continue;
-            min = Math.min(min, candle.getLow());
-            max = Math.max(max, candle.getHigh());
-        }
-
-        if (!Double.isFinite(min) || !Double.isFinite(max)) return Double.NaN;
-        if (max <= min) {
-            double center = (max + min) / 2.0;
-            double pad = Math.max(Math.abs(center) * 0.001, 0.0001);
-            min = center - pad;
-            max = center + pad;
-        }
-
-        double padding = Math.max((max - min) * 0.08, 0.00001);
-        min -= padding;
-        max += padding;
-
-        float chartHeight = getHeight() - CHART_TOP - CHART_BOTTOM;
-        if (chartHeight <= 0) return Double.NaN;
-
-        double normalized = (crosshairY - CHART_TOP) / chartHeight;
-        return max - normalized * (max - min);
-    }
+    // ---------------------------------------------------------
+    // HELPERS
+    // ---------------------------------------------------------
 
     private int calculateVisibleCount() {
         float slot = candleWidth + spacing;
-        if (slot <= 0) return 1;
-        float chartWidth = getWidth() - CHART_LEFT - CHART_RIGHT;
-        return Math.max(1, (int) Math.floor(chartWidth / slot));
+        return Math.max(1, (int) ((getWidth() - LEFT - RIGHT) / slot));
     }
 
     private int calculateStartIndex() {
         int visible = calculateVisibleCount();
         int maxStart = Math.max(0, candles.size() - visible);
-        int start = maxStart - Math.round(scrollOffset);
-        return Math.max(0, Math.min(start, maxStart));
+        return Math.max(0, Math.min(maxStart,
+                maxStart - Math.round(scrollOffset)));
     }
 
     private void clampScroll() {
         int visible = calculateVisibleCount();
-        float maxScroll = Math.max(0, candles.size() - visible);
-        scrollOffset = Math.max(0, Math.min(scrollOffset, maxScroll));
+        float max = Math.max(0, candles.size() - visible);
+        scrollOffset = Math.max(0, Math.min(max, scrollOffset));
     }
 
-    private float getCandleX(int index, int startIndex) {
+    private float candleX(int index, int start) {
         float slot = candleWidth + spacing;
-        return CHART_LEFT + (index - startIndex) * slot + slot / 2f;
+        return LEFT + (index - start) * slot + slot / 2f;
     }
 
-    private int getCandleIndexFromX(float x) {
-        int start = calculateStartIndex();
-        float slot = candleWidth + spacing;
-        if (slot <= 0) return start;
-
-        int index = start + (int) Math.floor(
-                (x - CHART_LEFT) / slot);
-        if (index < 0 || index >= candles.size()) return -1;
-        return index;
+    private boolean onScreen(float x) {
+        return x >= LEFT - candleWidth && x <= getWidth() - RIGHT + candleWidth;
     }
 
-    private float priceToY(double price, double minPrice,
-                           double range, float top, float chartHeight) {
-        if (!Double.isFinite(range) || range == 0) {
-            return top + chartHeight / 2f;
-        }
-        double normalized = (price - minPrice) / range;
-        return (float) (top + chartHeight * (1.0 - normalized));
+    private float priceY(double price, double min, double range,
+                         float top, float height) {
+        if (!Double.isFinite(range) || range == 0) return top + height / 2;
+        return (float) (top + height * (1 - (price - min) / range));
     }
 
-    private void drawPriceScale(Canvas canvas, double minPrice,
-                                double maxPrice) {
-        paint.setColor(textColor);
-        paint.setTextSize(17f);
-        paint.setStyle(Paint.Style.FILL);
-
-        int steps = 6;
-        float chartHeight = getHeight() - CHART_TOP - CHART_BOTTOM;
-
-        for (int i = 0; i <= steps; i++) {
-            double price = minPrice + (maxPrice - minPrice) * i / steps;
-            float y = CHART_TOP + chartHeight * (1f - i / (float) steps);
-
-            paint.setColor(Color.rgb(90, 100, 115));
-            canvas.drawRect(getWidth() - CHART_RIGHT, y - 1f,
-                    getWidth() - CHART_RIGHT + 5f, y + 1f, paint);
-
-            paint.setColor(textColor);
-            canvas.drawText(formatPrice(price),
-                    getWidth() - CHART_RIGHT + 8f, y + 5f, paint);
-        }
+    private boolean valid(Candle c) {
+        return c != null && Double.isFinite(c.getOpen())
+                && Double.isFinite(c.getHigh())
+                && Double.isFinite(c.getLow())
+                && Double.isFinite(c.getClose())
+                && c.getHigh() >= c.getLow();
     }
 
-    private void drawTimeScale(Canvas canvas, int startIndex,
-                               int endIndex) {
-        if (endIndex <= startIndex) return;
-
-        float bottom = getHeight() - CHART_BOTTOM;
-        int count = endIndex - startIndex;
-        int labels = Math.min(6, Math.max(2, count / 12));
-        int step = Math.max(1, count / labels);
-
-        paint.setTextSize(12f);
-        paint.setColor(textColor);
-        paint.setTextAlign(Paint.Align.CENTER);
-
-        for (int i = startIndex; i < endIndex; i += step) {
-            Candle candle = candles.get(i);
-            if (candle == null) continue;
-
-            float x = getCandleX(i, startIndex);
-            if (x < CHART_LEFT || x > getWidth() - CHART_RIGHT) continue;
-
-            canvas.drawText(formatCandleTime(candle.getTimestamp()),
-                    x, bottom + 22f, paint);
-        }
-        paint.setTextAlign(Paint.Align.LEFT);
+    private double validMinTrade() {
+        double v = Double.MAX_VALUE;
+        if (Double.isFinite(entry)) v = Math.min(v, entry);
+        if (Double.isFinite(stopLoss)) v = Math.min(v, stopLoss);
+        if (Double.isFinite(tp1)) v = Math.min(v, tp1);
+        if (Double.isFinite(tp2)) v = Math.min(v, tp2);
+        if (Double.isFinite(tp3)) v = Math.min(v, tp3);
+        return v == Double.MAX_VALUE ? Double.NaN : v;
     }
 
-    private String formatCandleTime(long timestamp) {
+    private double validMaxTrade() {
+        double v = -Double.MAX_VALUE;
+        if (Double.isFinite(entry)) v = Math.max(v, entry);
+        if (Double.isFinite(stopLoss)) v = Math.max(v, stopLoss);
+        if (Double.isFinite(tp1)) v = Math.max(v, tp1);
+        if (Double.isFinite(tp2)) v = Math.max(v, tp2);
+        if (Double.isFinite(tp3)) v = Math.max(v, tp3);
+        return v == -Double.MAX_VALUE ? Double.NaN : v;
+    }
+
+    private String formatPrice(double price) {
+        if (!Double.isFinite(price)) return "--";
+        if (price >= 1000) return String.format(Locale.US, "%.2f", price);
+        if (price >= 100) return String.format(Locale.US, "%.3f", price);
+        if (price >= 10) return String.format(Locale.US, "%.4f", price);
+        return String.format(Locale.US, "%.5f", price);
+    }
+
+    private String formatTime(long timestamp) {
         if (timestamp <= 0) return "--";
-
         SimpleDateFormat format =
                 new SimpleDateFormat("dd MMM HH:mm", Locale.US);
         format.setTimeZone(TimeZone.getTimeZone("Africa/Johannesburg"));
         return format.format(new Date(timestamp));
     }
 
-    private String formatPrice(double price) {
-        if (!Double.isFinite(price)) return "--";
-
-        if (price >= 1000) {
-            return String.format(Locale.US, "%.2f", price);
-        } else if (price >= 100) {
-            return String.format(Locale.US, "%.3f", price);
-        } else if (price >= 10) {
-            return String.format(Locale.US, "%.4f", price);
-        }
-        return String.format(Locale.US, "%.5f", price);
+    private int getCandleIndexFromX(float x) {
+        float slot = candleWidth + spacing;
+        if (slot <= 0) return -1;
+        int index = calculateStartIndex() + (int) ((x - LEFT) / slot);
+        return index >= 0 && index < candles.size() ? index : -1;
     }
 
-    private void drawMessage(Canvas canvas, String message) {
-        paint.setColor(Color.rgb(150, 165, 185));
-        paint.setTextSize(23f);
-        paint.setStyle(Paint.Style.FILL);
-        paint.setTextAlign(Paint.Align.CENTER);
-        canvas.drawText(message, getWidth() / 2f,
-                getHeight() / 2f, paint);
-        paint.setTextAlign(Paint.Align.LEFT);
-    }
-
-    private boolean isValidCandle(Candle candle) {
-        return candle != null
-                && Double.isFinite(candle.getOpen())
-                && Double.isFinite(candle.getHigh())
-                && Double.isFinite(candle.getLow())
-                && Double.isFinite(candle.getClose())
-                && candle.getHigh() >= candle.getLow();
-    }
-
-    private double validMinTradeLevel() {
-        double value = Double.MAX_VALUE;
-        if (Double.isFinite(entry)) value = Math.min(value, entry);
-        if (Double.isFinite(stopLoss)) value = Math.min(value, stopLoss);
-        if (Double.isFinite(tp1)) value = Math.min(value, tp1);
-        if (Double.isFinite(tp2)) value = Math.min(value, tp2);
-        if (Double.isFinite(tp3)) value = Math.min(value, tp3);
-        return value == Double.MAX_VALUE ? Double.NaN : value;
-    }
-
-    private double validMaxTradeLevel() {
-        double value = -Double.MAX_VALUE;
-        if (Double.isFinite(entry)) value = Math.max(value, entry);
-        if (Double.isFinite(stopLoss)) value = Math.max(value, stopLoss);
-        if (Double.isFinite(tp1)) value = Math.max(value, tp1);
-        if (Double.isFinite(tp2)) value = Math.max(value, tp2);
-        if (Double.isFinite(tp3)) value = Math.max(value, tp3);
-        return value == -Double.MAX_VALUE ? Double.NaN : value;
-    }
+    // ---------------------------------------------------------
+    // TOUCH / DRAWING PLACEMENT / ZOOM
+    // ---------------------------------------------------------
 
     private class ScaleListener
             extends ScaleGestureDetector.SimpleOnScaleGestureListener {
-
         @Override
         public boolean onScale(ScaleGestureDetector detector) {
             float factor = detector.getScaleFactor();
             if (!Float.isFinite(factor) || factor <= 0) return true;
-
-            float focusX = detector.getFocusX();
-            float oldSlot = candleWidth + spacing;
-            if (oldSlot <= 0) return true;
-
-            int oldStart = calculateStartIndex();
-            int focusIndex = oldStart + (int) Math.floor(
-                    (focusX - CHART_LEFT) / oldSlot);
-
-            candleWidth *= factor;
-            candleWidth = Math.max(MIN_CANDLE_WIDTH,
-                    Math.min(MAX_CANDLE_WIDTH, candleWidth));
+            candleWidth = Math.max(5f, Math.min(55f, candleWidth * factor));
             updateSpacing();
-
-            float newSlot = candleWidth + spacing;
-            int newVisible = calculateVisibleCount();
-            int newMaxStart = Math.max(0, candles.size() - newVisible);
-            int desiredStart = focusIndex - (int) Math.floor(
-                    (focusX - CHART_LEFT) / newSlot);
-
-            desiredStart = Math.max(0,
-                    Math.min(desiredStart, newMaxStart));
-            scrollOffset = newMaxStart - desiredStart;
             clampScroll();
             invalidate();
             return true;
@@ -1078,41 +1251,53 @@ public class ForexChartView extends View {
     @Override
     public boolean onTouchEvent(MotionEvent event) {
         scaleDetector.onTouchEvent(event);
+        float x = event.getX();
+        float y = event.getY();
 
         switch (event.getActionMasked()) {
             case MotionEvent.ACTION_DOWN:
                 setParentScrollEnabled(false);
-                lastX = event.getX();
-                lastY = event.getY();
+                lastX = x;
+                lastY = y;
                 moving = true;
+
+                if (!activeDrawingTool.isEmpty()) {
+                    drawingStartX = x;
+                    drawingStartY = y;
+                    placingDrawing = true;
+                    return true;
+                }
+
                 showCrosshair = true;
-                crosshairX = event.getX();
-                crosshairY = event.getY();
-                selectedCandleIndex = getCandleIndexFromX(crosshairX);
+                crosshairX = x;
+                crosshairY = y;
+                selectedCandleIndex = getCandleIndexFromX(x);
                 invalidate();
                 return true;
 
             case MotionEvent.ACTION_POINTER_DOWN:
-                setParentScrollEnabled(false);
                 showCrosshair = false;
-                selectedCandleIndex = -1;
+                placingDrawing = false;
                 invalidate();
                 return true;
 
             case MotionEvent.ACTION_MOVE:
-                setParentScrollEnabled(false);
-
-                if (event.getPointerCount() >= 2) {
+                if (event.getPointerCount() > 1) {
                     showCrosshair = false;
-                    selectedCandleIndex = -1;
+                    placingDrawing = false;
                     invalidate();
                     return true;
                 }
 
                 if (!moving) return true;
 
-                float dx = event.getX() - lastX;
-                float dy = event.getY() - lastY;
+                if (placingDrawing) {
+                    invalidate();
+                    return true;
+                }
+
+                float dx = x - lastX;
+                float dy = y - lastY;
 
                 if (Math.abs(dx) > Math.abs(dy)) {
                     float slot = candleWidth + spacing;
@@ -1121,44 +1306,38 @@ public class ForexChartView extends View {
                         clampScroll();
                     }
                 } else {
-                    crosshairY = event.getY();
+                    crosshairY = y;
                 }
 
-                crosshairX = event.getX();
-                selectedCandleIndex = getCandleIndexFromX(crosshairX);
-                lastX = event.getX();
-                lastY = event.getY();
+                crosshairX = x;
+                selectedCandleIndex = getCandleIndexFromX(x);
+                lastX = x;
+                lastY = y;
                 showCrosshair = true;
                 invalidate();
                 return true;
 
-            case MotionEvent.ACTION_POINTER_UP:
-                setParentScrollEnabled(false);
-                int pointerIndex = event.getActionIndex();
-                int remainingPointer = -1;
-
-                for (int i = 0; i < event.getPointerCount(); i++) {
-                    if (i != pointerIndex) {
-                        remainingPointer = i;
-                        break;
-                    }
-                }
-
-                if (remainingPointer >= 0) {
-                    lastX = event.getX(remainingPointer);
-                    lastY = event.getY(remainingPointer);
-                }
-                return true;
-
             case MotionEvent.ACTION_UP:
+                if (placingDrawing) {
+                    String type = activeDrawingTool;
+                    drawings.add(new DrawingObject(type,
+                            drawingStartX, drawingStartY, x, y, Color.YELLOW));
+                    selectedDrawing = drawings.get(drawings.size() - 1);
+                    placingDrawing = false;
+                    activeDrawingTool = "";
+                }
+
                 moving = false;
                 setParentScrollEnabled(true);
                 performClick();
+                invalidate();
                 return true;
 
             case MotionEvent.ACTION_CANCEL:
                 moving = false;
+                placingDrawing = false;
                 setParentScrollEnabled(true);
+                invalidate();
                 return true;
         }
         return true;
