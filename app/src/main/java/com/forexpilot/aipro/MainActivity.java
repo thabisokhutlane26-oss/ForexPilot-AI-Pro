@@ -1,4 +1,3 @@
-
 package com.forexpilot.aipro;
 
 import android.app.Activity;
@@ -47,7 +46,7 @@ public class MainActivity extends Activity {
     private TextView sydneySessionText, tokyoSessionText;
     private TextView londonSessionText, newYorkSessionText;
     private TextView marketName, priceText, signalText;
-    private TextView trendText, rsiText, atrText, momentumText;
+    private TextView trendText, momentumText;
     private TextView entryText, stopLossText, tp1Text, tp2Text, tp3Text;
     private TextView mtf5mText, mtf15mText, mtf30mText;
     private TextView mtf1hText, mtf4hText, mtf1dText, mtfConfluenceText;
@@ -497,17 +496,10 @@ public class MainActivity extends Activity {
 
         LinearLayout row1 = createMetricRow();
         trendText = createMetric("TREND", "--");
-        rsiText = createMetric("RSI", "--");
-        row1.addView(trendText, weightParams());
-        row1.addView(rsiText, weightParams());
-        indicatorCard.addView(row1, params(8));
-
-        LinearLayout row2 = createMetricRow();
-        atrText = createMetric("ATR", "--");
         momentumText = createMetric("TIMEFRAME", selectedTimeframe);
-        row2.addView(atrText, weightParams());
-        row2.addView(momentumText, weightParams());
-        indicatorCard.addView(row2, params(8));
+        row1.addView(trendText, weightParams());
+        row1.addView(momentumText, weightParams());
+        indicatorCard.addView(row1, params(8));
         analysis.addView(indicatorCard, params(8));
 
         LinearLayout mtfCard = createCard();
@@ -709,7 +701,6 @@ public class MainActivity extends Activity {
 
     private void selectChartMode(int mode) {
         chartMode = mode;
-
         chartPreferences.edit()
                 .putInt("chart_mode", chartMode)
                 .apply();
@@ -1221,8 +1212,6 @@ public class MainActivity extends Activity {
         }
         if (priceText != null) priceText.setText("PRICE  --");
         if (trendText != null) trendText.setText("TREND\n--");
-        if (rsiText != null) rsiText.setText("RSI\n--");
-        if (atrText != null) atrText.setText("ATR\n--");
         if (momentumText != null) {
             momentumText.setText("TIMEFRAME\n" + selectedTimeframe);
         }
@@ -1416,6 +1405,7 @@ public class MainActivity extends Activity {
 
                     if (!isForexMarketOpen(new Date())) {
                         updatePrimaryDashboard(signal);
+
                         resetTradeStyleDisplay();
                         connectionStatus.setText(
                                 "● HISTORICAL SIGNAL DATA • MARKET CLOSED");
@@ -1559,22 +1549,6 @@ public class MainActivity extends Activity {
                     "BULLISH".equalsIgnoreCase(trend) ? GREEN
                             : "BEARISH".equalsIgnoreCase(trend)
                             ? RED : WHITE);
-        }
-
-        if (rsiText != null) {
-            rsiText.setText(Double.isFinite(rsi)
-                    ? "RSI\n" + String.format(Locale.US, "%.2f", rsi)
-                    : "RSI\n--");
-            if (Double.isFinite(rsi)) {
-                rsiText.setTextColor(
-                        rsi >= 70 ? RED : rsi <= 30 ? GREEN : WHITE);
-            }
-        }
-
-        if (atrText != null) {
-            atrText.setText("ATR\n"
-                    + (Double.isFinite(atr)
-                    ? formatPrice(market, atr) : "--"));
         }
 
         if (momentumText != null) {
@@ -1869,12 +1843,6 @@ public class MainActivity extends Activity {
         }
 
         trendText.setText("TREND\n" + signal.getTrend());
-        rsiText.setText(Double.isNaN(signal.getRsi()) ? "RSI\n--"
-                : "RSI\n" + String.format(
-                        Locale.US, "%.2f", signal.getRsi()));
-        atrText.setText(Double.isNaN(signal.getAtr()) ? "ATR\n--"
-                : "ATR\n" + formatPrice(
-                        signal.getSymbol(), signal.getAtr()));
         momentumText.setText("TIMEFRAME\n" + signal.getTimeframe());
     }
 
@@ -1912,12 +1880,6 @@ public class MainActivity extends Activity {
                         ? RED : YELLOW);
 
         trendText.setText("TREND\n" + signal.getTrend());
-        rsiText.setText(Double.isNaN(signal.getRsi()) ? "RSI\n--"
-                : "RSI\n" + String.format(
-                        Locale.US, "%.2f", signal.getRsi()));
-        atrText.setText(Double.isNaN(signal.getAtr()) ? "ATR\n--"
-                : "ATR\n" + formatPrice(
-                        signal.getSymbol(), signal.getAtr()));
         momentumText.setText("TIMEFRAME\n" + signal.getTimeframe());
 
         if (signal.getDirection() == Signal.Direction.BUY
@@ -2027,10 +1989,31 @@ public class MainActivity extends Activity {
 
     private Spinner createSpinner(String[] values) {
         Spinner spinner = new Spinner(this);
-        ArrayAdapter<String> adapter = new ArrayAdapter<>(
-                this, android.R.layout.simple_spinner_item, values);
-        adapter.setDropDownViewResource(
-                android.R.layout.simple_spinner_dropdown_item);
+        ArrayAdapter<String> adapter = new ArrayAdapter<String>(
+                this, android.R.layout.simple_spinner_item, values) {
+            private TextView styleText(View view) {
+                TextView text = (TextView) view;
+                text.setTextColor(lightMode ? Color.BLACK : Color.WHITE);
+                text.setBackgroundColor(
+                        lightMode ? Color.WHITE : FIELD_BACKGROUND);
+                text.setPadding(dp(12), dp(10), dp(12), dp(10));
+                return text;
+            }
+
+            @Override
+            public View getView(int position, View convertView,
+                                android.view.ViewGroup parent) {
+                return styleText(super.getView(
+                        position, convertView, parent));
+            }
+
+            @Override
+            public View getDropDownView(int position, View convertView,
+                                        android.view.ViewGroup parent) {
+                return styleText(super.getDropDownView(
+                        position, convertView, parent));
+            }
+        };
         spinner.setAdapter(adapter);
         return spinner;
     }
