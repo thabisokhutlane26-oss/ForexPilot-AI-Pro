@@ -437,6 +437,15 @@ private boolean fullscreenChart = false;
         chartCard.addView(createText(
                 "Candlesticks • Line • Bars", 12, MUTED, false),
                 params(3));
+        
+        // FULL-SCREEN CHART BUTTON
+Button fullscreenButton =
+        createSmallActionButton("FULL SCREEN  ⛶");
+
+fullscreenButton.setOnClickListener(
+        v -> enterFullscreenChart());
+
+chartCard.addView(fullscreenButton, params(8));
 
         LinearLayout styleRow = new LinearLayout(this);
         styleRow.setOrientation(LinearLayout.HORIZONTAL);
@@ -2106,6 +2115,199 @@ private boolean fullscreenChart = false;
         p.setMargins(dp(4), 0, dp(4), 0);
         return p;
     }
+
+    
+// ======================================
+// FULL-SCREEN LANDSCAPE CHART
+// ======================================
+
+private void enterFullscreenChart() {
+
+    if (fullscreenChart || forexChartView == null) {
+        return;
+    }
+
+    if (!(forexChartView.getParent() instanceof ViewGroup)) {
+        return;
+    }
+
+    // Remember the chart's original location.
+    chartOriginalParent =
+            (ViewGroup) forexChartView.getParent();
+
+    chartOriginalIndex =
+            chartOriginalParent.indexOfChild(forexChartView);
+
+    chartOriginalLayoutParams =
+            forexChartView.getLayoutParams();
+
+    // Remove chart from normal dashboard.
+    chartOriginalParent.removeView(forexChartView);
+
+    // Remember current screen settings.
+    View decorView = getWindow().getDecorView();
+
+    previousSystemUiVisibility =
+            decorView.getSystemUiVisibility();
+
+    previousRequestedOrientation =
+            getRequestedOrientation();
+
+    // Create full-screen container.
+    fullscreenChartOverlay = new FrameLayout(this);
+
+    fullscreenChartOverlay.setBackgroundColor(Color.BLACK);
+
+    fullscreenChartOverlay.setFocusableInTouchMode(true);
+
+    // Add chart to fill the screen.
+    FrameLayout.LayoutParams chartParams =
+            new FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT,
+                    FrameLayout.LayoutParams.MATCH_PARENT);
+
+    fullscreenChartOverlay.addView(
+            forexChartView, chartParams);
+
+    // Add an exit button.
+    Button exitButton =
+            createSmallActionButton("EXIT FULL SCREEN  ✕");
+
+    exitButton.setOnClickListener(
+            v -> exitFullscreenChart());
+
+    FrameLayout.LayoutParams exitParams =
+            new FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.WRAP_CONTENT,
+                    FrameLayout.LayoutParams.WRAP_CONTENT,
+                    Gravity.TOP | Gravity.END);
+
+    exitParams.setMargins(
+            dp(8), dp(8), dp(12), dp(8));
+
+    fullscreenChartOverlay.addView(
+            exitButton, exitParams);
+
+    // Put the overlay above the entire app content.
+    FrameLayout content =
+            findViewById(android.R.id.content);
+
+    content.addView(
+            fullscreenChartOverlay,
+            new FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT,
+                    FrameLayout.LayoutParams.MATCH_PARENT));
+
+    // Hide Android status and navigation bars.
+    int immersiveFlags =
+            View.SYSTEM_UI_FLAG_FULLSCREEN
+            | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+            | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+            | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+            | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+            | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION;
+
+    decorView.setSystemUiVisibility(immersiveFlags);
+
+    fullscreenChart = true;
+
+    // Rotate the phone to landscape.
+    setRequestedOrientation(
+            ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
+
+    fullscreenChartOverlay.requestFocus();
+}
+
+// EXIT FULL-SCREEN CHART
+
+private void exitFullscreenChart() {
+
+    if (!fullscreenChart) {
+        return;
+    }
+
+    // Remove chart from the full-screen container.
+    if (forexChartView != null
+            && forexChartView.getParent() instanceof ViewGroup) {
+
+        ((ViewGroup) forexChartView.getParent())
+                .removeView(forexChartView);
+    }
+
+    // Remove the overlay.
+    if (fullscreenChartOverlay != null) {
+
+        FrameLayout content =
+                findViewById(android.R.id.content);
+
+        content.removeView(fullscreenChartOverlay);
+
+        fullscreenChartOverlay = null;
+    }
+
+    // Restore chart to its original dashboard position.
+    if (chartOriginalParent != null
+            && forexChartView != null) {
+
+        int index = Math.max(
+                0,
+                Math.min(
+                        chartOriginalIndex,
+                        chartOriginalParent.getChildCount()));
+
+        chartOriginalParent.addView(
+                forexChartView,
+                index,
+                chartOriginalLayoutParams);
+    }
+
+    fullscreenChart = false;
+
+    // Restore Android system bars.
+    getWindow().getDecorView()
+            .setSystemUiVisibility(
+                    previousSystemUiVisibility);
+
+    // Restore original orientation.
+    setRequestedOrientation(
+            previousRequestedOrientation);
+
+    if (forexChartView != null) {
+        forexChartView.requestLayout();
+    }
+
+    chartOriginalParent = null;
+    chartOriginalLayoutParams = null;
+    chartOriginalIndex = -1;
+}
+
+
+// PHONE BACK BUTTON
+
+@Override
+public void onBackPressed() {
+
+    if (fullscreenChart) {
+        exitFullscreenChart();
+        return;
+    }
+
+    super.onBackPressed();
+}
+
+@Override
+protected void onDestroy() {
+    clockHandler.removeCallbacks(clockRunnable);
+
+    if (signalRepository != null) {
+        signalRepository.stop();
+    }
+    if (marketDataProvider != null) {
+        marketDataProvider.stop();
+    }
+
+    super.onDestroy();
+}
 
     @Override
     protected void onDestroy() {
