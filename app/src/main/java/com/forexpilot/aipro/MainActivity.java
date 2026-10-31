@@ -2308,18 +2308,4 @@ protected void onDestroy() {
 
     super.onDestroy();
 }
-
-    @Override
-    protected void onDestroy() {
-        clockHandler.removeCallbacks(clockRunnable);
-
-        if (signalRepository != null) {
-            signalRepository.stop();
-        }
-        if (marketDataProvider != null) {
-            marketDataProvider.stop();
-        }
-
-        super.onDestroy();
-    }
-}
+ 
