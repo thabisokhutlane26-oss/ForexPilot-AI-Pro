@@ -31,6 +31,8 @@ import java.util.Date;
 import java.util.List;
 import java.util.Locale;
 import java.util.TimeZone;
+import android.content.pm.ActivityInfo;
+import android.view.ViewGroup;
 
 public class MainActivity extends Activity {
 
@@ -40,6 +42,15 @@ public class MainActivity extends Activity {
     private ForexChartView forexChartView;
     private SignalRepository signalRepository;
     private MarketDataProvider marketDataProvider;
+
+    // FULL-SCREEN LANDSCAPE CHART
+private FrameLayout fullscreenChartOverlay;
+private ViewGroup chartOriginalParent;
+private ViewGroup.LayoutParams chartOriginalLayoutParams;
+private int chartOriginalIndex = -1;
+private int previousSystemUiVisibility;
+private int previousRequestedOrientation;
+private boolean fullscreenChart = false;
 
     private TextView connectionStatus, clockText, dateText;
     private TextView forexStatusText, nextMarketText;
