@@ -124,7 +124,7 @@ public class TwelveDataProvider implements MarketDataProvider {
                         BASE_URL
                                 + "?symbol=" + encodedSymbol
                                 + "&interval=" + interval
-                                + "&outputsize=100"
+                                + "&outputsize=200"
                                 + "&order=asc"
                                 + "&apikey=" + encodedApiKey;
 
