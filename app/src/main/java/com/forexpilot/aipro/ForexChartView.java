@@ -1,4 +1,3 @@
-
 package com.forexpilot.aipro;
 
 import android.content.Context;
@@ -448,6 +447,7 @@ public class ForexChartView extends View {
             case "EMA":
             case "MOVINGAVERAGE":
                 movingAverages[0].enabled = enabled;
+
                 break;
             case "MA2":
             case "MOVINGAVERAGE2":
@@ -898,6 +898,365 @@ public class ForexChartView extends View {
 
             float oy = priceY(c.getOpen(), min, range, top, height);
             float cy = priceY(c.getClose(), min, range, top, height);
+
+            float x = candleX(i, start);
+            if (!onScreen(x)) continue;
+
+            float volume = (float) Math.max(0, c.getVolume());
+            float barHeight = (float) (volume / maxVolume * area);
+
+            paint.setColor(c.getClose() >= c.getOpen()
+                    ? volumeColor : volumeDownColor);
+            canvas.drawRect(x - candleWidth * .3f,
+                    usableBottom - barHeight,
+                    x + candleWidth * .3f,
+                    usableBottom, paint);
+        }
+    }
+
+    // ---------------------------------------------------------
+    // PANEL HELPERS
+    // ---------------------------------------------------------
+
+    private float panelY(double value, double min,
+                         double range, Panel panel) {
+        return (float) (panel.bottom
+                - ((value - min) / range) * panel.height());
+    }
+
+    private void drawPanelFunction(Canvas canvas, Panel panel,
+                                   int start, int end,
+                                   double min, double range,
+                                   int color, ValueFunction function) {
+        Path path = new Path();
+        boolean begun = false;
+
+        for (int i = start; i < end; i++) {
+            double value = function.value(i);
+            if (!Double.isFinite(value)) {
+                begun = false;
+                continue;
+            }
+
+            float x = candleX(i, start);
+            float y = panelY(value, min, range, panel);
+
+            if (!begun) {
+                path.moveTo(x, y);
+                begun = true;
+            } else {
+                path.lineTo(x, y);
+            }
+        }
+
+        paint.setColor(color);
+        paint.setStrokeWidth(2f);
+        paint.setStyle(Paint.Style.STROKE);
+        canvas.drawPath(path, paint);
+        paint.setStyle(Paint.Style.FILL);
+    }
+
+    private void drawLevel(Canvas canvas, Panel panel,
+                           double value, double min, double max) {
+        float y = panelY(value, min, max - min, panel);
+        paint.setColor(gridColor);
+        paint.setStrokeWidth(1f);
+        paint.setStyle(Paint.Style.STROKE);
+        canvas.drawLine(LEFT, y, getWidth() - RIGHT, y, paint);
+        paint.setStyle(Paint.Style.FILL);
+    }
+
+    private void drawPanelScale(Canvas canvas, Panel panel,
+                                double min, double max) {
+        paint.setColor(textColor);
+        paint.setTextSize(labelFontSize);
+        canvas.drawText(String.format(Locale.US, "%.2f", max),
+                getWidth() - RIGHT + 5, panel.top + 15, paint);
+        canvas.drawText(String.format(Locale.US, "%.2f", min),
+                getWidth() - RIGHT + 5, panel.bottom - 3, paint);
+    }
+
+    // ---------------------------------------------------------
+    // FRACTALS
+    // ---------------------------------------------------------
+
+    private void drawFractals(Canvas canvas, int start, int end,
+                              double min, double range,
+                              float top, float height) {
+        if (candles.size() < 5) return;
+
+        paint.setTextSize(18f);
+        paint.setColor(fractalColor);
+
+        for (int i = Math.max(2, start); i < Math.min(end, candles.size() - 2); i++) {
+            Candle current = candles.get(i);
+            boolean high = true;
+            boolean low = true;
+
+            for (int j = i - 2; j <= i + 2; j++) {
+                if (j == i) continue;
+                if (candles.get(j).getHigh() >= current.getHigh()) high = false;
+                if (candles.get(j).getLow() <= current.getLow()) low = false;
+            }
+
+            float x = candleX(i, start);
+
+            if (high) {
+                float y = priceY(current.getHigh(), min, range, top, height);
+                canvas.drawText("▼", x - 6, y - 5, paint);
+            }
+
+            if (low) {
+                float y = priceY(current.getLow(), min, range, top, height);
+                canvas.drawText("▲", x - 6, y + 18, paint);
+            }
+        }
+    }
+
+    // ---------------------------------------------------------
+    // PRICE SCALE AND TRADE LEVELS
+    // ---------------------------------------------------------
+
+    private void drawPriceScale(Canvas canvas, double min, double max,
+                                float top, float bottom) {
+        paint.setColor(textColor);
+        paint.setTextSize(priceFontSize);
+        paint.setTextAlign(Paint.Align.LEFT);
+
+        for (int i = 0; i <= 6; i++) {
+            double price = max - (max - min) * i / 6.0;
+            float y = top + (bottom - top) * i / 6f;
+            String label = String.format(Locale.US, "%.5f", price);
+            canvas.drawText(label, getWidth() - RIGHT + 5, y + 4, paint);
+        }
+    }
+
+    private void drawLatestPrice(Canvas canvas, int latestIndex,
+                                 int start, double min, double range,
+                                 float top, float height) {
+        if (latestIndex < 0 || latestIndex >= candles.size()) return;
+
+        double price = candles.get(latestIndex).getClose();
+        float y = priceY(price, min, range, top, height);
+
+        paint.setColor(priceLineColor);
+        paint.setStrokeWidth(1f);
+        paint.setStyle(Paint.Style.STROKE);
+        canvas.drawLine(LEFT, y, getWidth() - RIGHT, y, paint);
+        paint.setStyle(Paint.Style.FILL);
+
+        paint.setColor(priceLineColor);
+        canvas.drawRect(getWidth() - RIGHT, y - 10,
+                getWidth(), y + 10, paint);
+
+        paint.setColor(Color.WHITE);
+        paint.setTextSize(10f);
+        canvas.drawText(String.format(Locale.US, "%.5f", price),
+                getWidth() - RIGHT + 4, y + 4, paint);
+    }
+
+    private void drawTradeLines(Canvas canvas, double min, double max,
+                                double range, float top, float height) {
+        drawTradeLine(canvas, entry, entryColor, "ENTRY",
+                min, range, top, height);
+        drawTradeLine(canvas, stopLoss, stopColor, "STOP LOSS",
+                min, range, top, height);
+        drawTradeLine(canvas, tp1, targetColor, "TP1",
+                min, range, top, height);
+        drawTradeLine(canvas, tp2, targetColor, "TP2",
+                min, range, top, height);
+        drawTradeLine(canvas, tp3, targetColor, "TP3",
+                min, range, top, height);
+    }
+
+    private void drawTradeLine(Canvas canvas, double value, int color,
+                               String label, double min, double range,
+                               float top, float height) {
+        if (!Double.isFinite(value)) return;
+
+        float y = priceY(value, min, range, top, height);
+
+        paint.setColor(color);
+        paint.setStrokeWidth(1.5f);
+        paint.setStyle(Paint.Style.STROKE);
+        canvas.drawLine(LEFT, y, getWidth() - RIGHT, y, paint);
+        paint.setStyle(Paint.Style.FILL);
+
+        paint.setTextSize(labelFontSize);
+        canvas.drawText(label, LEFT + 4, y - 4, paint);
+    }
+
+    // ---------------------------------------------------------
+    // TIME SCALE
+    // ---------------------------------------------------------
+
+    private void drawTimeScale(Canvas canvas, int start, int end,
+                               float y) {
+        paint.setColor(textColor);
+        paint.setTextSize(labelFontSize);
+        paint.setTextAlign(Paint.Align.CENTER);
+
+        SimpleDateFormat format =
+                new SimpleDateFormat("HH:mm", Locale.US);
+        format.setTimeZone(TimeZone.getDefault());
+
+        int count = Math.max(1, (end - start) / 6);
+
+        for (int i = start; i < end; i += count) {
+            Candle candle = candles.get(i);
+            float x = candleX(i, start);
+
+            if (x < LEFT || x > getWidth() - RIGHT) continue;
+
+            long time = candle.getTime();
+            canvas.drawText(format.format(new Date(time)),
+                    x, y + 18, paint);
+        }
+
+        paint.setTextAlign(Paint.Align.LEFT);
+    }
+
+    // ---------------------------------------------------------
+    // SIGNAL MARKER
+    // ---------------------------------------------------------
+
+    private void drawSignalMarker(Canvas canvas, int start,
+                                  double min, double range,
+                                  float top, float height) {
+        if (signalDirection == Signal.Direction.WAIT) return;
+        if (candles.isEmpty()) return;
+
+        Candle latest = candles.get(candles.size() - 1);
+        float x = candleX(candles.size() - 1, start);
+        float y = priceY(latest.getClose(), min, range, top, height);
+
+        paint.setColor(signalDirection == Signal.Direction.BUY
+                ? indicatorBuyColor : indicatorSellColor);
+        canvas.drawCircle(x, y, 7f, paint);
+
+        paint.setTextSize(11f);
+        canvas.drawText(signalDirection.name(), x + 10, y - 8, paint);
+    }
+
+    // ---------------------------------------------------------
+    // CROSSHAIR
+    // ---------------------------------------------------------
+
+    private void drawCrosshair(Canvas canvas, float priceBottom) {
+        paint.setColor(Color.LTGRAY);
+        paint.setStrokeWidth(1f);
+        paint.setStyle(Paint.Style.STROKE);
+
+        canvas.drawLine(crosshairX, TOP,
+                crosshairX, priceBottom, paint);
+        canvas.drawLine(LEFT, crosshairY,
+                getWidth() - RIGHT, crosshairY, paint);
+
+        paint.setStyle(Paint.Style.FILL);
+        paint.setTextSize(labelFontSize);
+        canvas.drawText("PRICE", getWidth() - RIGHT + 5,
+                crosshairY - 4, paint);
+    }
+
+    // ---------------------------------------------------------
+    // DRAWING OBJECTS
+    // ---------------------------------------------------------
+
+    private void drawObjects(Canvas canvas) {
+        for (DrawingObject d : drawings) {
+            paint.setColor(d.color);
+            paint.setStrokeWidth(selectedDrawing == d ? 3f : 2f);
+            paint.setStyle(Paint.Style.STROKE);
+
+            String type = d.type == null
+                    ? "" : d.type.toUpperCase(Locale.US);
+
+            switch (type) {
+                case "VERTICAL":
+                case "VERTICAL_LINE":
+                    canvas.drawLine(d.x1, TOP, d.x1,
+                            getHeight() - BOTTOM, paint);
+                    break;
+
+                case "HORIZONTAL":
+                case "HORIZONTAL_LINE":
+                    canvas.drawLine(LEFT, d.y1,
+                            getWidth() - RIGHT, d.y1, paint);
+                    break;
+
+                case "RECTANGLE":
+                case "RECT":
+                    canvas.drawRect(
+                            Math.min(d.x1, d.x2),
+                            Math.min(d.y1, d.y2),
+                            Math.max(d.x1, d.x2),
+                            Math.max(d.y1, d.y2), paint);
+                    break;
+
+                case "ELLIPSE":
+                case "CIRCLE":
+                    canvas.drawOval(new RectF(
+                            Math.min(d.x1, d.x2),
+                            Math.min(d.y1, d.y2),
+                            Math.max(d.x1, d.x2),
+                            Math.max(d.y1, d.y2)), paint);
+                    break;
+
+                case "TRIANGLE":
+                    Path triangle = new Path();
+                    triangle.moveTo(d.x1, d.y2);
+                    triangle.lineTo((d.x1 + d.x2) / 2f, d.y1);
+                    triangle.lineTo(d.x2, d.y2);
+                    triangle.close();
+                    canvas.drawPath(triangle, paint);
+                    break;
+
+                case "ARROWED":
+                case "ARROW":
+                    canvas.drawLine(d.x1, d.y1, d.x2, d.y2, paint);
+                    break;
+
+                case "FIBONACCI RETRACEMENT":
+                case "FIBONACCI":
+                    canvas.drawLine(d.x1, d.y1, d.x2, d.y1, paint);
+                    canvas.drawLine(d.x1, d.y2, d.x2, d.y2, paint);
+                    break;
+
+                case "CHANNEL":
+                case "EQUIDISTANT":
+                case "EQUI_DISTANT":
+                    canvas.drawLine(d.x1, d.y1, d.x2, d.y2, paint);
+                    canvas.drawLine(d.x1, d.y1 + 35,
+                            d.x2, d.y2 + 35, paint);
+                    break;
+
+                case "GANN FAN":
+                case "FAN":
+                    canvas.drawLine(d.x1, d.y1, d.x2, d.y2, paint);
+                    canvas.drawLine(d.x1, d.y1,
+                            d.x2, d.y1, paint);
+                    canvas.drawLine(d.x1, d.y1,
+                            d.x1, d.y2, paint);
+                    break;
+
+                case "NOTE":
+                case "NOTES":
+                    paint.setStyle(Paint.Style.FILL);
+                    paint.setTextSize(14f);
+                    canvas.drawText(
+                            d.note == null ? "Note" : d.note,
+                            d.x1, d.y1, paint);
+                    break;
+
+                default:
+                    canvas.drawLine(d.x1, d.y1, d.x2, d.y2, paint);
+                    break;
+            }
+
+            paint.setStyle(Paint.Style.FILL);
+        }
+    }
+
             float hy = priceY(c.getHigh(), min, range, top, height);
             float ly = priceY(c.getLow(), min, range, top, height);
             float tick = Math.max(3f, candleWidth * .25f);
@@ -1097,8 +1456,7 @@ public class ForexChartView extends View {
                 });
 
         drawPriceFunction(canvas, start, end, min, range, top, height,
-                bollingerColor, 1.4f, i -> {
-                    int shifted = i - bollingerShift;
+                bollingerColor, 1.4f, i -> {                    int shifted = i - bollingerShift;
                     double avg = bollingerAverage(shifted);
                     double sd = bollingerDeviationValue(shifted);
                     return Double.isFinite(avg) && Double.isFinite(sd)
@@ -1298,6 +1656,7 @@ public class ForexChartView extends View {
         for (int i = index - stochasticSlowing + 1; i <= index; i++) {
             double value = stochasticRaw(i);
             if (!Double.isFinite(value)) return Double.NaN;
+
             sum += value;
         }
         return sum / stochasticSlowing;
@@ -1498,6 +1857,7 @@ public class ForexChartView extends View {
         paint.setColor(Color.WHITE);
         paint.setTextSize(priceFontSize);
         canvas.drawText(formatPrice(c.getClose()),
+
                 getWidth() - RIGHT + 6, y + 5, paint);
     }
 
@@ -1698,6 +2058,7 @@ public class ForexChartView extends View {
             if (x < LEFT || x > getWidth() - RIGHT) continue;
 
             canvas.drawText(formatTime(candles.get(i).getTimestamp()),
+
                     x, bottom + 21, paint);
         }
         paint.setTextAlign(Paint.Align.LEFT);
