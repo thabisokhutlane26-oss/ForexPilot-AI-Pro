@@ -1,4 +1,3 @@
-
 package com.forexpilot.aipro;
 
 import org.json.JSONArray;
@@ -14,6 +13,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 public class TwelveDataProvider implements MarketDataProvider {
 
@@ -21,7 +21,6 @@ public class TwelveDataProvider implements MarketDataProvider {
             "https://api.twelvedata.com/time_series";
 
     private static final long CACHE_DURATION_MS = 30_000L;
-
     private static final int CONNECTION_TIMEOUT_MS = 15000;
     private static final int READ_TIMEOUT_MS = 15000;
 
@@ -32,8 +31,9 @@ public class TwelveDataProvider implements MarketDataProvider {
     private final ConcurrentHashMap<String, CacheEntry> cache =
             new ConcurrentHashMap<>();
 
-    private final ConcurrentHashMap<String, Long> lastRequestTimes =
-            new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String,
+            CopyOnWriteArrayList<MarketDataManager.MarketDataCallback>>
+            inFlight = new ConcurrentHashMap<>();
 
     private static class CacheEntry {
         final List<Candle> candles;
@@ -55,78 +55,69 @@ public class TwelveDataProvider implements MarketDataProvider {
             String timeframe,
             MarketDataManager.MarketDataCallback callback
     ) {
-        if (callback == null) {
+        if (callback == null || stopped) return;
+
+        final String normalizedSymbol = normalizeSymbol(symbol);
+        final String interval = convertTimeframe(timeframe);
+
+        if (normalizedSymbol == null || interval == null) {
+            callback.onError("UNSUPPORTED SYMBOL OR TIMEFRAME");
             return;
         }
 
-        stopped = false;
+        final String cacheKey = normalizedSymbol + "|" + interval;
+        final CopyOnWriteArrayList<MarketDataManager.MarketDataCallback>
+                callbacks;
+
+        // Share simultaneous requests for the same symbol and timeframe.
+        synchronized (inFlight) {
+            CopyOnWriteArrayList<MarketDataManager.MarketDataCallback>
+                    existing = inFlight.get(cacheKey);
+
+            if (existing != null) {
+                existing.add(callback);
+                return;
+            }
+
+            callbacks = new CopyOnWriteArrayList<>();
+            callbacks.add(callback);
+            inFlight.put(cacheKey, callbacks);
+        }
 
         new Thread(() -> {
             HttpURLConnection connection = null;
 
             try {
                 if (apiKey == null || apiKey.trim().isEmpty()) {
-                    callback.onError(
-                            "API KEY NOT CONFIGURED. CHECK TWELVE DATA SETTINGS."
-                    );
+                    notifyError(callbacks,
+                            "API KEY NOT CONFIGURED. CHECK TWELVE DATA SETTINGS.");
                     return;
                 }
 
-                String normalizedSymbol = normalizeSymbol(symbol);
-                String interval = convertTimeframe(timeframe);
-
-                if (normalizedSymbol == null || interval == null) {
-                    callback.onError("UNSUPPORTED SYMBOL OR TIMEFRAME");
-                    return;
-                }
-
-                String cacheKey = normalizedSymbol + "|" + interval;
-                long now = System.currentTimeMillis();
+                if (stopped) return;
 
                 CacheEntry cached = cache.get(cacheKey);
+                long now = System.currentTimeMillis();
 
                 if (cached != null
                         && now - cached.savedAt < CACHE_DURATION_MS
                         && !cached.candles.isEmpty()) {
-
-                    if (!stopped) {
-                        deliverCandles(cached.candles, callback);
-                    }
+                    deliverCandles(cached.candles, callbacks);
                     return;
                 }
-
-                Long lastRequest = lastRequestTimes.get(cacheKey);
-
-                if (lastRequest != null
-                        && now - lastRequest < 3000L) {
-
-                    callback.onError(
-                            "PLEASE WAIT A FEW SECONDS BEFORE SCANNING AGAIN."
-                    );
-                    return;
-                }
-
-                lastRequestTimes.put(cacheKey, now);
 
                 String encodedSymbol =
-                        URLEncoder.encode(
-                                normalizedSymbol,
-                                "UTF-8"
-                        );
+                        URLEncoder.encode(normalizedSymbol, "UTF-8");
 
                 String encodedApiKey =
-                        URLEncoder.encode(
-                                apiKey.trim(),
-                                "UTF-8"
-                        );
+                        URLEncoder.encode(apiKey.trim(), "UTF-8");
 
-                String requestUrl =
-                        BASE_URL
-                                + "?symbol=" + encodedSymbol
-                                + "&interval=" + interval
-                                + "&outputsize=200"
-                                + "&order=asc"
-                                + "&apikey=" + encodedApiKey;
+                String requestUrl = BASE_URL
+                        + "?symbol=" + encodedSymbol
+                        + "&interval=" + interval
+                        + "&outputsize=200"
+                        + "&order=asc"
+                        + "&apikey=" + encodedApiKey;
 
                 URL url = new URL(requestUrl);
 
@@ -134,10 +125,7 @@ public class TwelveDataProvider implements MarketDataProvider {
                 connection.setRequestMethod("GET");
                 connection.setConnectTimeout(CONNECTION_TIMEOUT_MS);
                 connection.setReadTimeout(READ_TIMEOUT_MS);
-                connection.setRequestProperty(
-                        "Accept",
-                        "application/json"
-                );
+                connection.setRequestProperty("Accept", "application/json");
 
                 int responseCode = connection.getResponseCode();
 
@@ -148,83 +136,72 @@ public class TwelveDataProvider implements MarketDataProvider {
 
                 String responseText = readResponse(stream);
 
-                if (stopped) {
-                    return;
-                }
+                if (stopped) return;
 
                 JSONObject root;
 
                 try {
                     root = new JSONObject(responseText);
                 } catch (Exception e) {
-                    callback.onError(
+                    notifyError(callbacks,
                             "INVALID RESPONSE FROM TWELVE DATA (HTTP "
-                                    + responseCode + "). TRY AGAIN LATER."
-                    );
+                                    + responseCode + "). TRY AGAIN LATER.");
                     return;
                 }
 
                 String status = root.optString("status", "");
+
                 String apiMessage = root.optString(
                         "message",
                         root.optString("code", "")
                 );
 
                 if (responseCode == 429) {
-                    callback.onError(
-                            "TWELVE DATA RATE LIMIT REACHED. WAIT BEFORE SCANNING AGAIN."
-                    );
+                    notifyError(callbacks,
+                            "TWELVE DATA RATE LIMIT REACHED. WAIT BEFORE SCANNING AGAIN.");
                     return;
                 }
 
                 if (responseCode == 401) {
-                    callback.onError(
-                            "TWELVE DATA API KEY IS INVALID. CHECK YOUR API KEY."
-                    );
+                    notifyError(callbacks,
+                            "TWELVE DATA API KEY IS INVALID. CHECK YOUR API KEY.");
                     return;
                 }
 
                 if (responseCode == 403) {
-                    callback.onError(
-                            "TWELVE DATA ACCESS DENIED. CHECK YOUR API PLAN."
-                    );
+                    notifyError(callbacks,
+                            "TWELVE DATA ACCESS DENIED. CHECK YOUR API PLAN.");
                     return;
                 }
 
                 if (responseCode < 200 || responseCode >= 300) {
-                    callback.onError(
-                            "TWELVE DATA HTTP ERROR "
-                                    + responseCode
+                    notifyError(callbacks,
+                            "TWELVE DATA HTTP ERROR " + responseCode
                                     + (apiMessage.isEmpty()
-                                    ? ""
-                                    : ": " + apiMessage)
-                    );
+                                    ? "" : ": " + apiMessage));
                     return;
                 }
 
                 if ("error".equalsIgnoreCase(status)) {
-                    callback.onError(
+                    notifyError(callbacks,
                             "TWELVE DATA ERROR: "
                                     + (apiMessage.isEmpty()
-                                    ? "REQUEST FAILED"
-                                    : apiMessage)
-                    );
+                                    ? "REQUEST FAILED" : apiMessage));
                     return;
                 }
 
                 List<Candle> candles = parseCandles(root);
 
                 if (candles.isEmpty()) {
-                    callback.onError(
-                            "TWELVE DATA RETURNED NO VALID CANDLES."
-                    );
+                    notifyError(callbacks,
+                            "TWELVE DATA RETURNED NO VALID CANDLES.");
                     return;
                 }
 
                 Candle latest = candles.get(candles.size() - 1);
 
                 if (!isValidCandle(latest)) {
-                    callback.onError("INVALID LIVE CANDLE DATA.");
+                    notifyError(callbacks, "INVALID LIVE CANDLE DATA.");
                     return;
                 }
 
@@ -236,36 +213,69 @@ public class TwelveDataProvider implements MarketDataProvider {
                         )
                 );
 
-                if (!stopped) {
-                    deliverCandles(candles, callback);
-                }
+                deliverCandles(candles, callbacks);
 
             } catch (Exception e) {
                 if (!stopped) {
-                    callback.onError(
-                            "CONNECTION FAILED. CHECK INTERNET AND TRY AGAIN."
-                    );
+                    notifyError(callbacks,
+                            "CONNECTION FAILED. CHECK INTERNET AND TRY AGAIN.");
                 }
             } finally {
                 if (connection != null) {
                     connection.disconnect();
                 }
+
+                synchronized (inFlight) {
+                    inFlight.remove(cacheKey, callbacks);
+                }
             }
-        }).start();
+        }, "ForexPilot-TwelveData").start();
+    }
+
+    private void notifyError(
+            List<MarketDataManager.MarketDataCallback> callbacks,
+            String message
+    ) {
+        if (stopped) return;
+
+        for (MarketDataManager.MarketDataCallback callback : callbacks) {
+            if (callback != null) {
+                callback.onError(message);
+            }
+        }
+    }
+
+    private void deliverCandles(
+            List<Candle> candles,
+            List<MarketDataManager.MarketDataCallback> callbacks
+    ) {
+        if (candles == null || candles.isEmpty() || stopped) return;
+
+        List<Candle> safeCopy = new ArrayList<>(candles);
+        Candle latest = safeCopy.get(safeCopy.size() - 1);
+
+        if (!isValidCandle(latest)) {
+            notifyError(callbacks, "INVALID CANDLE DATA.");
+            return;
+        }
+
+        for (MarketDataManager.MarketDataCallback callback : callbacks) {
+            if (stopped) return;
+
+            if (callback != null) {
+                callback.onCandlesReceived(new ArrayList<>(safeCopy));
+                callback.onPriceReceived(latest.getClose());
+            }
+        }
     }
 
     private String readResponse(InputStream stream) throws Exception {
-        if (stream == null) {
-            return "";
-        }
+        if (stream == null) return "";
 
         StringBuilder response = new StringBuilder();
 
         try (BufferedReader reader = new BufferedReader(
-                new InputStreamReader(
-                        stream,
-                        StandardCharsets.UTF_8
-                ))) {
+                new InputStreamReader(stream, StandardCharsets.UTF_8))) {
 
             String line;
 
@@ -277,44 +287,17 @@ public class TwelveDataProvider implements MarketDataProvider {
         return response.toString();
     }
 
-    private void deliverCandles(
-            List<Candle> candles,
-            MarketDataManager.MarketDataCallback callback
-    ) {
-        if (candles == null || candles.isEmpty() || stopped) {
-            return;
-        }
-
-        List<Candle> safeCopy = new ArrayList<>(candles);
-        Candle latest = safeCopy.get(safeCopy.size() - 1);
-
-        if (!isValidCandle(latest)) {
-            callback.onError("INVALID CANDLE DATA.");
-            return;
-        }
-
-        callback.onCandlesReceived(safeCopy);
-
-        if (!stopped) {
-            callback.onPriceReceived(latest.getClose());
-        }
-    }
-
     private List<Candle> parseCandles(JSONObject root) {
         List<Candle> candles = new ArrayList<>();
 
         JSONArray values = root.optJSONArray("values");
 
-        if (values == null) {
-            return candles;
-        }
+        if (values == null) return candles;
 
         for (int i = 0; i < values.length(); i++) {
             JSONObject item = values.optJSONObject(i);
 
-            if (item == null) {
-                continue;
-            }
+            if (item == null) continue;
 
             double open = parseDouble(item.optString("open"));
             double high = parseDouble(item.optString("high"));
@@ -336,9 +319,7 @@ public class TwelveDataProvider implements MarketDataProvider {
                     item.optString("datetime")
             );
 
-            if (timestamp <= 0) {
-                continue;
-            }
+            if (timestamp <= 0) continue;
 
             double volume = parseDouble(
                     item.optString("volume", "0")
@@ -348,16 +329,14 @@ public class TwelveDataProvider implements MarketDataProvider {
                 volume = 0.0;
             }
 
-            candles.add(
-                    new Candle(
-                            timestamp,
-                            open,
-                            high,
-                            low,
-                            close,
-                            volume
-                    )
-            );
+            candles.add(new Candle(
+                    timestamp,
+                    open,
+                    high,
+                    low,
+                    close,
+                    volume
+            ));
         }
 
         return candles;
@@ -392,9 +371,8 @@ public class TwelveDataProvider implements MarketDataProvider {
                             )
                     );
 
-            return dateTime.atZone(
-                    java.time.ZoneOffset.UTC
-            ).toInstant().toEpochMilli();
+            return dateTime.atZone(java.time.ZoneOffset.UTC)
+                    .toInstant().toEpochMilli();
 
         } catch (Exception ignored) {
             try {
@@ -406,9 +384,8 @@ public class TwelveDataProvider implements MarketDataProvider {
                                 )
                         );
 
-                return date.atStartOfDay(
-                        java.time.ZoneOffset.UTC
-                ).toInstant().toEpochMilli();
+                return date.atStartOfDay(java.time.ZoneOffset.UTC)
+                        .toInstant().toEpochMilli();
 
             } catch (Exception e) {
                 return 0L;
@@ -435,9 +412,7 @@ public class TwelveDataProvider implements MarketDataProvider {
     }
 
     private String normalizeSymbol(String symbol) {
-        if (symbol == null) {
-            return null;
-        }
+        if (symbol == null) return null;
 
         String normalized = symbol.trim().toUpperCase();
 
@@ -484,9 +459,7 @@ public class TwelveDataProvider implements MarketDataProvider {
     }
 
     private String convertTimeframe(String timeframe) {
-        if (timeframe == null) {
-            return null;
-        }
+        if (timeframe == null) return null;
 
         switch (timeframe.trim().toUpperCase()) {
             case "5M":
