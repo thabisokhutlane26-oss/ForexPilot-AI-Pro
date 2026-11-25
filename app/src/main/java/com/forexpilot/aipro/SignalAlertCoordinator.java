@@ -5,24 +5,10 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-/**
- * Step 11 integration coordinator.
- *
- * Connects the existing BackgroundScanner to:
- * - MultiTimeframeEngine
- * - SignalNotificationManager
- *
- * MainActivity remains untouched.
- */
 public class SignalAlertCoordinator {
 
     private static final String[] TIMEFRAMES = {
-            "5M",
-            "15M",
-            "30M",
-            "1H",
-            "4H",
-            "1D"
+            "5M", "15M", "30M", "1H", "4H", "1D"
     };
 
     private final BackgroundScanner scanner;
@@ -38,11 +24,41 @@ public class SignalAlertCoordinator {
     public SignalAlertCoordinator(
             BackgroundScanner scanner,
             MultiTimeframeEngine multiTimeframeEngine,
-            SignalNotificationManager notificationManager
-    ) {
+            SignalNotificationManager notificationManager) {
+
         this.scanner = scanner;
         this.multiTimeframeEngine = multiTimeframeEngine;
         this.notificationManager = notificationManager;
+
+        if (this.scanner != null) {
+            this.scanner.setCallback(new BackgroundScanner.ScanCallback() {
+                @Override
+                public void onScanStarted() {
+                    // Scanner cycle started.
+                }
+
+                @Override
+                public void onTimeframeResult(
+                        String market, String timeframe, Signal signal) {
+                    SignalAlertCoordinator.this.onTimeframeResult(
+                            market, timeframe, signal);
+                }
+
+                @Override
+                public void onScanCompleted(
+                        String market, List<Signal> signals) {
+                    SignalAlertCoordinator.this.onScanCompleted(
+                            market, signals);
+                }
+
+                @Override
+                public void onScanError(
+                        String market, String timeframe, String message) {
+                    SignalAlertCoordinator.this.onScanError(
+                            market, timeframe, message);
+                }
+            });
+        }
     }
 
     public void setEnabled(boolean enabled) {
@@ -68,27 +84,16 @@ public class SignalAlertCoordinator {
         currentMarket = "";
     }
 
-    /**
-     * BackgroundScanner.scanNow() takes no arguments.
-     */
     public void scanNow(String market) {
-        if (scanner == null) {
-            return;
-        }
+        if (scanner == null) return;
 
-        if (market != null && !market.trim().isEmpty()) {
-            currentMarket = market.trim();
-        }
-
+        setMarket(market);
+        scanner.setMarket(currentMarket);
         scanner.scanNow();
     }
 
     public void setMarket(String market) {
-        if (market == null) {
-            currentMarket = "";
-            signalCache.clear();
-            return;
-        }
+        if (market == null || market.trim().isEmpty()) return;
 
         String normalized = market.trim();
 
@@ -96,28 +101,23 @@ public class SignalAlertCoordinator {
             currentMarket = normalized;
             signalCache.clear();
         }
+
+        if (scanner != null) {
+            scanner.setMarket(normalized);
+        }
     }
 
     public String getCurrentMarket() {
         return currentMarket;
     }
 
-    /**
-     * This coordinator intentionally uses its own public method for receiving
-     * scanner results. The existing BackgroundScanner remains untouched.
-     */
     public void onTimeframeResult(
-            String market,
-            String timeframe,
-            Signal signal
-    ) {
-        if (market == null ||
-                timeframe == null ||
-                signal == null) {
-            return;
-        }
+            String market, String timeframe, Signal signal) {
 
-        currentMarket = market;
+        if (!enabled || market == null
+                || timeframe == null || signal == null) return;
+
+        if (!market.equals(currentMarket)) return;
 
         List<Signal> signals = signalCache.get(market);
 
@@ -126,58 +126,33 @@ public class SignalAlertCoordinator {
             signalCache.put(market, signals);
         }
 
-        replaceTimeframeSignal(
-                signals,
-                timeframe,
-                signal
-        );
-
-        evaluateConfluence(
-                market,
-                signals
-        );
+        replaceTimeframeSignal(signals, timeframe, signal);
+        evaluateConfluence(market, signals);
     }
 
     public void onScanCompleted(
-            String market,
-            List<Signal> signals
-    ) {
-        if (market == null || signals == null) {
-            return;
-        }
+            String market, List<Signal> signals) {
 
-        signalCache.put(
-                market,
-                new ArrayList<>(signals)
-        );
+        if (!enabled || market == null || signals == null) return;
+        if (!market.equals(currentMarket)) return;
 
-        evaluateConfluence(
-                market,
-                signals
-        );
+        signalCache.put(market, new ArrayList<>(signals));
+        evaluateConfluence(market, signals);
     }
 
     public void onScanError(
-            String market,
-            String timeframe,
-            String message
-    ) {
-        // Errors must never create fake signals.
+            String market, String timeframe, String message) {
+        // Failed timeframes are not converted into signals.
     }
 
     private void replaceTimeframeSignal(
-            List<Signal> signals,
-            String timeframe,
-            Signal newSignal
-    ) {
-        for (int i = 0; i < signals.size(); i++) {
+            List<Signal> signals, String timeframe, Signal newSignal) {
 
+        for (int i = 0; i < signals.size(); i++) {
             Signal existing = signals.get(i);
 
-            if (existing != null &&
-                    timeframe.equalsIgnoreCase(
-                            existing.getTimeframe())) {
-
+            if (existing != null
+                    && timeframe.equalsIgnoreCase(existing.getTimeframe())) {
                 signals.set(i, newSignal);
                 return;
             }
@@ -187,130 +162,68 @@ public class SignalAlertCoordinator {
     }
 
     private void evaluateConfluence(
-            String market,
-            List<Signal> signals
-    ) {
-        if (!enabled ||
-                signals == null ||
-                signals.size() < TIMEFRAMES.length) {
-            return;
-        }
+            String market, List<Signal> signals) {
+
+        if (!enabled || multiTimeframeEngine == null
+                || notificationManager == null
+                || signals == null
+                || signals.size() < TIMEFRAMES.length) return;
 
         List<MultiTimeframeEngine.TimeframeResult> results =
                 new ArrayList<>();
 
         for (String timeframe : TIMEFRAMES) {
+            Signal signal = findSignal(signals, timeframe);
 
-            Signal signal =
-                    findSignal(
-                            signals,
-                            timeframe
-                    );
+            if (signal == null) return;
 
-            if (signal == null) {
-                return;
-            }
-
-            results.add(
-                    new MultiTimeframeEngine.TimeframeResult(
-                            timeframe,
-                            signal.getDirection(),
-                            "",
-                            signal.getRsi(),
-                            signal.getAtr()
-                    )
-            );
+            results.add(new MultiTimeframeEngine.TimeframeResult(
+                    timeframe,
+                    signal.getDirection(),
+                    "",
+                    signal.getRsi(),
+                    signal.getAtr()
+            ));
         }
 
         MultiTimeframeEngine.ConfluenceResult confluence =
-                multiTimeframeEngine.calculateConfluence(
-                        results
-                );
+                multiTimeframeEngine.calculateConfluence(results);
 
-        if (confluence == null) {
-            return;
-        }
+        if (confluence == null) return;
 
-        Signal.Direction direction =
-                confluence.getDirection();
+        Signal.Direction direction = confluence.getDirection();
 
-        int strength =
-                confluence.getStrength();
-
-        if (direction == Signal.Direction.WAIT) {
-            return;
-        }
-
-        if (strength < 4) {
-            return;
-        }
+        if (direction == null
+                || direction == Signal.Direction.WAIT
+                || confluence.getStrength() < 4) return;
 
         Signal notificationSignal =
-                selectNotificationSignal(
-                        signals,
-                        direction
-                );
+                selectNotificationSignal(signals, direction);
 
-        if (notificationSignal == null) {
-            return;
+        if (notificationSignal != null) {
+            notificationManager.notifySignal(notificationSignal);
         }
-
-        /*
-         * Existing SignalNotificationManager accepts only Signal.
-         * It already handles the notification details and duplicate
-         * protection internally.
-         */
-        notificationManager.notifySignal(
-                notificationSignal
-        );
     }
 
-    private Signal findSignal(
-            List<Signal> signals,
-            String timeframe
-    ) {
+    private Signal findSignal(List<Signal> signals, String timeframe) {
         for (Signal signal : signals) {
-
-            if (signal == null) {
-                continue;
-            }
-
-            if (timeframe.equalsIgnoreCase(
-                    signal.getTimeframe())) {
-
+            if (signal != null
+                    && timeframe.equalsIgnoreCase(signal.getTimeframe())) {
                 return signal;
             }
         }
-
         return null;
     }
 
     private Signal selectNotificationSignal(
-            List<Signal> signals,
-            Signal.Direction direction
-    ) {
-        String[] priority = {
-                "15M",
-                "30M",
-                "5M",
-                "1H",
-                "4H",
-                "1D"
-        };
+            List<Signal> signals, Signal.Direction direction) {
+
+        String[] priority = {"15M", "30M", "5M", "1H", "4H", "1D"};
 
         for (String timeframe : priority) {
+            Signal signal = findSignal(signals, timeframe);
 
-            Signal signal =
-                    findSignal(
-                            signals,
-                            timeframe
-                    );
-
-            if (signal == null) {
-                continue;
-            }
-
-            if (signal.getDirection() == direction) {
+            if (signal != null && signal.getDirection() == direction) {
                 return signal;
             }
         }
@@ -319,13 +232,9 @@ public class SignalAlertCoordinator {
     }
 
     public void clearMarket(String market) {
-        if (market == null) {
-            return;
+        if (market != null) {
+            signalCache.remove(market.trim());
         }
-
-        signalCache.remove(
-                market.trim()
-        );
     }
 
     public void clearAll() {
