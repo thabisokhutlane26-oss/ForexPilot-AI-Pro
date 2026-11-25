@@ -1,17 +1,21 @@
 package com.forexpilot.aipro;
 
+import android.Manifest;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.SharedPreferences;
 import android.content.res.Configuration;
+import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.text.InputType;
 import android.view.Gravity;
 import android.view.View;
+import android.view.ViewGroup;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
@@ -31,26 +35,46 @@ import java.util.Date;
 import java.util.List;
 import java.util.Locale;
 import java.util.TimeZone;
-import android.content.pm.ActivityInfo;
-import android.view.ViewGroup;
 
 public class MainActivity extends Activity {
 
     private static final String PREFS = "forexpilot_preferences";
     private static final String CHART_PREFS = "forexpilot_chart_settings";
 
+    private static final int NOTIFICATION_PERMISSION_REQUEST = 4101;
+    private static final long CHART_REFRESH_INTERVAL_MS = 60_000L;
+
     private ForexChartView forexChartView;
     private SignalRepository signalRepository;
     private MarketDataProvider marketDataProvider;
 
+    private BackgroundScanner backgroundScanner;
+    private SignalAlertCoordinator signalAlertCoordinator;
+    private SignalNotificationManager signalNotificationManager;
+
+    private final Handler chartRefreshHandler = new Handler();
+
+    private final Runnable chartRefreshRunnable = new Runnable() {
+        @Override
+        public void run() {
+            if (marketDataProvider != null
+                    && isForexMarketOpen(new Date())) {
+                requestChartCandles();
+            }
+
+            chartRefreshHandler.postDelayed(
+                    this, CHART_REFRESH_INTERVAL_MS);
+        }
+    };
+
     // FULL-SCREEN LANDSCAPE CHART
-private FrameLayout fullscreenChartOverlay;
-private ViewGroup chartOriginalParent;
-private ViewGroup.LayoutParams chartOriginalLayoutParams;
-private int chartOriginalIndex = -1;
-private int previousSystemUiVisibility;
-private int previousRequestedOrientation;
-private boolean fullscreenChart = false;
+    private FrameLayout fullscreenChartOverlay;
+    private ViewGroup chartOriginalParent;
+    private ViewGroup.LayoutParams chartOriginalLayoutParams;
+    private int chartOriginalIndex = -1;
+    private int previousSystemUiVisibility;
+    private int previousRequestedOrientation;
+    private boolean fullscreenChart = false;
 
     private TextView connectionStatus, clockText, dateText;
     private TextView forexStatusText, nextMarketText;
@@ -60,7 +84,8 @@ private boolean fullscreenChart = false;
     private TextView trendText, momentumText;
     private TextView entryText, stopLossText, tp1Text, tp2Text, tp3Text;
     private TextView mtf5mText, mtf15mText, mtf30mText;
-    private TextView mtf1hText, mtf4hText, mtf1dText, mtfConfluenceText;
+    private TextView mtf1hText, mtf4hText, mtf1dText;
+    private TextView mtfConfluenceText;
 
     private TextView homeTradeStyleText, homeConfidenceText;
     private TextView homeReviewTimeText, homeStyleReasonText;
@@ -73,7 +98,7 @@ private boolean fullscreenChart = false;
     private Button scanButton, themeButton;
 
     private Button candlesButton, lineButton, barsButton;
-    private Button addObjectButton, indicatorsButton, colorsButton;
+    private Button colorsButton;
 
     private FrameLayout pageContainer;
     private View[] appPages;
@@ -89,8 +114,10 @@ private boolean fullscreenChart = false;
     private boolean mtfScanning = false;
 
     private Signal pendingPrimarySignal;
+
     private final List<MultiTimeframeEngine.TimeframeResult> mtfResults =
             new ArrayList<>();
+
     private int mtfRequestIndex = 0;
 
     private final String[] markets = {
@@ -110,42 +137,6 @@ private boolean fullscreenChart = false;
     private int FIELD_BACKGROUND, BUTTON_BACKGROUND;
 
     private SharedPreferences chartPreferences;
-
-    private boolean bbEnabled = false;
-    private boolean maEnabled = false;
-    private boolean macdEnabled = false;
-    private boolean rsiEnabled = false;
-    private boolean stochasticEnabled = false;
-    private boolean volumesEnabled = false;
-    private boolean fractalsEnabled = false;
-
-    private int bbPeriod = 20;
-    private int maPeriod = 50;
-    private int macdFast = 12;
-    private int macdSlow = 26;
-    private int rsiPeriod = 14;
-    private int rsiUpper = 70;
-    private int rsiLower = 30;
-    private int stochasticK = 5;
-    private int stochasticD = 3;
-    private int stochasticSlowing = 3;
-
-    private final String[] drawingGroups = {
-            "NOTES", "LINES", "CHANNELS", "GANN",
-            "FIBONACCI", "ELLIOTT", "SHAPES"
-    };
-
-    private final String[][] drawingTools = {
-            {"Text"},
-            {"Vertical", "Horizontal", "Trendline",
-                    "Trend By Angle", "Cycle", "Arrowed"},
-            {"Equidistant", "StdDev", "Regression", "Pitchfork"},
-            {"Line", "Fan", "Grid"},
-            {"Retracement", "Time Zones", "Fan",
-                    "Arcs", "Channel", "Expansion"},
-            {"Motive", "Corrective"},
-            {"Rectangle", "Triangle", "Ellipse"}
-    };
 
     private final String[] colorNames = {
             "Foreground", "Grid", "Bar up", "Bar down",
@@ -198,59 +189,30 @@ private boolean fullscreenChart = false;
                         ? ForexChartView.MODE_LINE
                         : ForexChartView.MODE_CANDLES);
 
-        loadChartSettings();
         applyThemeColors();
         buildDashboard();
+        requestNotificationPermission();
         updateTimeAndSessions();
         clockHandler.post(clockRunnable);
         connectToMarketData();
+
+        chartRefreshHandler.postDelayed(
+                chartRefreshRunnable, CHART_REFRESH_INTERVAL_MS);
     }
 
-    private void loadChartSettings() {
-        bbEnabled = chartPreferences.getBoolean("bb_enabled", false);
-        maEnabled = chartPreferences.getBoolean("ma_enabled", false);
-        macdEnabled = chartPreferences.getBoolean("macd_enabled", false);
-        rsiEnabled = chartPreferences.getBoolean("rsi_enabled", false);
-        stochasticEnabled =
-                chartPreferences.getBoolean("stochastic_enabled", false);
-        volumesEnabled =
-                chartPreferences.getBoolean("volumes_enabled", false);
-        fractalsEnabled =
-                chartPreferences.getBoolean("fractals_enabled", false);
+    private void requestNotificationPermission() {
+        if (Build.VERSION.SDK_INT >= 33
+                && checkSelfPermission(
+                Manifest.permission.POST_NOTIFICATIONS)
+                != PackageManager.PERMISSION_GRANTED) {
 
-        bbPeriod = chartPreferences.getInt("bb_period", 20);
-        maPeriod = chartPreferences.getInt("ma_period", 50);
-        macdFast = chartPreferences.getInt("macd_fast", 12);
-        macdSlow = chartPreferences.getInt("macd_slow", 26);
-        rsiPeriod = chartPreferences.getInt("rsi_period", 14);
-        rsiUpper = chartPreferences.getInt("rsi_upper", 70);
-        rsiLower = chartPreferences.getInt("rsi_lower", 30);
-        stochasticK = chartPreferences.getInt("stoch_k", 5);
-        stochasticD = chartPreferences.getInt("stoch_d", 3);
-        stochasticSlowing =
-                chartPreferences.getInt("stoch_slowing", 3);
-    }
-
-    private void saveChartSettings() {
-        chartPreferences.edit()
-                .putBoolean("bb_enabled", bbEnabled)
-                .putBoolean("ma_enabled", maEnabled)
-                .putBoolean("macd_enabled", macdEnabled)
-                .putBoolean("rsi_enabled", rsiEnabled)
-                .putBoolean("stochastic_enabled", stochasticEnabled)
-                .putBoolean("volumes_enabled", volumesEnabled)
-                .putBoolean("fractals_enabled", fractalsEnabled)
-                .putInt("bb_period", bbPeriod)
-                .putInt("ma_period", maPeriod)
-                .putInt("macd_fast", macdFast)
-                .putInt("macd_slow", macdSlow)
-                .putInt("rsi_period", rsiPeriod)
-                .putInt("rsi_upper", rsiUpper)
-                .putInt("rsi_lower", rsiLower)
-                .putInt("stoch_k", stochasticK)
-                .putInt("stoch_d", stochasticD)
-                .putInt("stoch_slowing", stochasticSlowing)
-                .apply();
+            requestPermissions(
+                    new String[]{
+                            Manifest.permission.POST_NOTIFICATIONS
+                    },
+                    NOTIFICATION_PERMISSION_REQUEST
+            );
+        }
     }
 
     private void applyThemeColors() {
@@ -289,7 +251,9 @@ private boolean fullscreenChart = false;
         updateTimeAndSessions();
         applyAllChartSettings();
 
-        if (marketDataProvider != null) requestChartCandles();
+        if (marketDataProvider != null) {
+            requestChartCandles();
+        }
 
         if (signalRepository != null && isForexMarketOpen(new Date())) {
             requestCurrentSignal();
@@ -437,15 +401,12 @@ private boolean fullscreenChart = false;
         chartCard.addView(createText(
                 "Candlesticks • Line • Bars", 12, MUTED, false),
                 params(3));
-        
-        // FULL-SCREEN CHART BUTTON
-Button fullscreenButton =
-        createSmallActionButton("FULL SCREEN  ⛶");
 
-fullscreenButton.setOnClickListener(
-        v -> enterFullscreenChart());
-
-chartCard.addView(fullscreenButton, params(8));
+        Button fullscreenButton =
+                createSmallActionButton("FULL SCREEN  ⛶");
+        fullscreenButton.setOnClickListener(
+                v -> enterFullscreenChart());
+        chartCard.addView(fullscreenButton, params(8));
 
         LinearLayout styleRow = new LinearLayout(this);
         styleRow.setOrientation(LinearLayout.HORIZONTAL);
@@ -469,16 +430,9 @@ chartCard.addView(fullscreenButton, params(8));
         LinearLayout toolRow = new LinearLayout(this);
         toolRow.setOrientation(LinearLayout.HORIZONTAL);
 
-        addObjectButton = createSmallActionButton("ADD OBJECT");
-        indicatorsButton = createSmallActionButton("INDICATORS f(x)");
         colorsButton = createSmallActionButton("COLORS");
-
-        addObjectButton.setOnClickListener(v -> showDrawingTools());
-        indicatorsButton.setOnClickListener(v -> showIndicatorSettings());
         colorsButton.setOnClickListener(v -> showChartColors());
 
-        toolRow.addView(addObjectButton, weightParams());
-        toolRow.addView(indicatorsButton, weightParams());
         toolRow.addView(colorsButton, weightParams());
         chartCard.addView(toolRow, params(6));
 
@@ -501,17 +455,16 @@ chartCard.addView(fullscreenButton, params(8));
         chartInfo.addView(createText(
                 "PAIR: " + selectedMarket
                         + "\nTIMEFRAME: " + selectedTimeframe
-                        + "\n\nSelect a chart style, add drawing objects, "
-                        + "configure indicators, or customize chart colors.",
+                        + "\n\nChoose a chart style or customize chart colors.",
                 13, MUTED, false), params(6));
         charts.addView(chartInfo, params(8));
 
-        // ANALYSIS
-        LinearLayout indicatorCard = createCard();
-        indicatorCard.addView(createText(
-                "TECHNICAL ANALYSIS", 19, WHITE, true));
-        indicatorCard.addView(createText(
-                "Indicators from available market candles",
+        // MARKET ANALYSIS
+        LinearLayout analysisCard = createCard();
+        analysisCard.addView(createText(
+                "MARKET ANALYSIS", 19, WHITE, true));
+        analysisCard.addView(createText(
+                "Trend and momentum from available market candles",
                 12, MUTED, false), params(3));
 
         LinearLayout row1 = createMetricRow();
@@ -519,8 +472,8 @@ chartCard.addView(fullscreenButton, params(8));
         momentumText = createMetric("TIMEFRAME", selectedTimeframe);
         row1.addView(trendText, weightParams());
         row1.addView(momentumText, weightParams());
-        indicatorCard.addView(row1, params(8));
-        analysis.addView(indicatorCard, params(8));
+        analysisCard.addView(row1, params(8));
+        analysis.addView(analysisCard, params(8));
 
         LinearLayout mtfCard = createCard();
         mtfCard.addView(createText(
@@ -637,7 +590,7 @@ chartCard.addView(fullscreenButton, params(8));
         aboutCard.addView(createText(
                 "ABOUT FOREXPILOT AI PRO", 16, WHITE, true));
         aboutCard.addView(createText(
-                "Market scanner • Technical indicators"
+                "Market scanner"
                         + "\nMulti-timeframe confirmation"
                         + "\nAutomatic trade-style selection"
                         + "\nTrade planning tools"
@@ -717,10 +670,12 @@ chartCard.addView(fullscreenButton, params(8));
         applyAllChartSettings();
     }
 
+
     // CHART STYLE CONTROLS
 
     private void selectChartMode(int mode) {
         chartMode = mode;
+
         chartPreferences.edit()
                 .putInt("chart_mode", chartMode)
                 .apply();
@@ -736,21 +691,30 @@ chartCard.addView(fullscreenButton, params(8));
         if (candlesButton == null) return;
 
         setActionButtonSelected(
-                candlesButton, chartMode == ForexChartView.MODE_CANDLES);
+                candlesButton,
+                chartMode == ForexChartView.MODE_CANDLES);
+
         setActionButtonSelected(
-                lineButton, chartMode == ForexChartView.MODE_LINE);
+                lineButton,
+                chartMode == ForexChartView.MODE_LINE);
+
         setActionButtonSelected(
-                barsButton, chartMode == ForexChartView.MODE_BARS);
+                barsButton,
+                chartMode == ForexChartView.MODE_BARS);
     }
 
-    private void setActionButtonSelected(Button button, boolean selected) {
+    private void setActionButtonSelected(
+            Button button, boolean selected) {
+
         if (button == null) return;
 
         GradientDrawable background = new GradientDrawable();
         background.setCornerRadius(dp(9));
-        background.setColor(selected ? BUTTON_BACKGROUND : FIELD_BACKGROUND);
-        background.setStroke(dp(1),
-                selected ? BLUE : CARD_BORDER);
+        background.setColor(
+                selected ? BUTTON_BACKGROUND : FIELD_BACKGROUND);
+        background.setStroke(
+                dp(1), selected ? BLUE : CARD_BORDER);
+
         button.setBackground(background);
         button.setTextColor(selected ? Color.WHITE : MUTED);
     }
@@ -769,221 +733,12 @@ chartCard.addView(fullscreenButton, params(8));
         return button;
     }
 
-    // DRAWING OBJECT MENU
-
-    private void showDrawingTools() {
-        ScrollView scroll = new ScrollView(this);
-        LinearLayout content = new LinearLayout(this);
-        content.setOrientation(LinearLayout.VERTICAL);
-        content.setPadding(dp(12), dp(8), dp(12), dp(8));
-        scroll.addView(content);
-
-        for (int group = 0; group < drawingGroups.length; group++) {
-            TextView heading = createSmallLabel(drawingGroups[group]);
-            heading.setPadding(dp(5), dp(12), dp(5), dp(5));
-            content.addView(heading);
-
-            for (String tool : drawingTools[group]) {
-                Button item = createSmallActionButton(tool);
-                item.setGravity(Gravity.CENTER_VERTICAL);
-                item.setOnClickListener(v -> activateDrawingTool(tool));
-                content.addView(item, params(4));
-            }
-        }
-
-        new AlertDialog.Builder(this)
-                .setTitle("ADD DRAWING OBJECT")
-                .setView(scroll)
-                .setNegativeButton("CLOSE", null)
-                .show();
-    }
-
-    private void activateDrawingTool(String tool) {
-        if (forexChartView == null) return;
-
-        String normalized = tool.toUpperCase(Locale.US)
-                .replace(" ", "_");
-
-        if ("TEXT".equals(normalized)) normalized = "NOTE";
-        if ("EQUIdistant".equalsIgnoreCase(tool)) {
-            normalized = "EQUI_DISTANT";
-        }
-
-        forexChartView.setDrawingTool(normalized);
-        showPage(1);
-
-        Toast.makeText(this,
-                tool + ": tap and drag on the chart to place it",
-                Toast.LENGTH_LONG).show();
-    }
-
-    // INDICATOR MENU
-
-    private void showIndicatorSettings() {
-        String[] names = {
-                "Bollinger Bands",
-                "Moving Average",
-                "MACD",
-                "RSI",
-                "Stochastic",
-                "Volumes",
-                "Fractals"
-        };
-
-        boolean[] checked = {
-                bbEnabled, maEnabled, macdEnabled, rsiEnabled,
-                stochasticEnabled, volumesEnabled, fractalsEnabled
-        };
-
-        new AlertDialog.Builder(this)
-                .setTitle("CHART INDICATORS")
-                .setMultiChoiceItems(names, checked,
-                        (dialog, which, isChecked) -> {
-                    switch (which) {
-                        case 0: bbEnabled = isChecked; break;
-                        case 1: maEnabled = isChecked; break;
-                        case 2: macdEnabled = isChecked; break;
-                        case 3: rsiEnabled = isChecked; break;
-                        case 4: stochasticEnabled = isChecked; break;
-                        case 5: volumesEnabled = isChecked; break;
-                        case 6: fractalsEnabled = isChecked; break;
-                    }
-                })
-                .setNeutralButton("SETTINGS", (dialog, which) ->
-                        showIndicatorParameterSettings())
-                .setNegativeButton("CANCEL", (dialog, which) ->
-                        loadChartSettings())
-                .setPositiveButton("SAVE / ADD", (dialog, which) -> {
-                    saveChartSettings();
-                    applyAllChartSettings();
-                    Toast.makeText(this,
-                            "Indicators updated", Toast.LENGTH_SHORT).show();
-                })
-                .show();
-    }
-
-    private void showIndicatorParameterSettings() {
-        LinearLayout form = new LinearLayout(this);
-        form.setOrientation(LinearLayout.VERTICAL);
-        form.setPadding(dp(16), dp(8), dp(16), dp(8));
-
-        EditText bb = addNumberField(form,
-                "Bollinger period", bbPeriod);
-        EditText ma = addNumberField(form,
-                "Moving Average period", maPeriod);
-        EditText fast = addNumberField(form,
-                "MACD fast period", macdFast);
-        EditText slow = addNumberField(form,
-                "MACD slow period", macdSlow);
-        EditText rsi = addNumberField(form,
-                "RSI period", rsiPeriod);
-        EditText upper = addNumberField(form,
-                "RSI upper level", rsiUpper);
-        EditText lower = addNumberField(form,
-                "RSI lower level", rsiLower);
-        EditText sk = addNumberField(form,
-                "Stochastic %K", stochasticK);
-        EditText sd = addNumberField(form,
-                "Stochastic %D", stochasticD);
-        EditText slowing = addNumberField(form,
-                "Stochastic slowing", stochasticSlowing);
-
-        ScrollView scroll = new ScrollView(this);
-        scroll.addView(form);
-
-        new AlertDialog.Builder(this)
-                .setTitle("INDICATOR PARAMETERS")
-                .setView(scroll)
-                .setNegativeButton("CANCEL", null)
-                .setPositiveButton("SAVE", (dialog, which) -> {
-                    bbPeriod = readPositive(bb, bbPeriod);
-                    maPeriod = readPositive(ma, maPeriod);
-                    macdFast = readPositive(fast, macdFast);
-                    macdSlow = readPositive(slow, macdSlow);
-                    rsiPeriod = readPositive(rsi, rsiPeriod);
-                    rsiUpper = readPositive(upper, rsiUpper);
-                    rsiLower = readPositive(lower, rsiLower);
-                    stochasticK = readPositive(sk, stochasticK);
-                    stochasticD = readPositive(sd, stochasticD);
-                    stochasticSlowing =
-                            readPositive(slowing, stochasticSlowing);
-
-                    if (macdFast >= macdSlow) {
-                        macdFast = 12;
-                        macdSlow = 26;
-                        Toast.makeText(this,
-                                "MACD fast must be less than slow. "
-                                        + "Defaults restored.",
-                                Toast.LENGTH_LONG).show();
-                    }
-
-                    if (rsiLower >= rsiUpper) {
-                        rsiLower = 30;
-                        rsiUpper = 70;
-                    }
-
-                    saveChartSettings();
-                    applyAllChartSettings();
-                })
-                .show();
-    }
-
-    private EditText addNumberField(
-            LinearLayout parent, String label, int value) {
-        TextView title = createSmallLabel(label);
-        title.setPadding(0, dp(7), 0, dp(3));
-        parent.addView(title);
-
-        EditText input = new EditText(this);
-        input.setSingleLine(true);
-        input.setInputType(InputType.TYPE_CLASS_NUMBER);
-        input.setText(String.valueOf(value));
-        input.setTextColor(WHITE);
-        input.setHintTextColor(MUTED);
-        input.setBackground(createRoundedBackground(
-                FIELD_BACKGROUND, CARD_BORDER, 8));
-        input.setPadding(dp(10), dp(8), dp(10), dp(8));
-        parent.addView(input);
-        return input;
-    }
-
-    private int readPositive(EditText input, int fallback) {
-        try {
-            int value = Integer.parseInt(
-                    input.getText().toString().trim());
-            return value > 0 && value <= 500 ? value : fallback;
-        } catch (Exception e) {
-            return fallback;
-        }
-    }
+    // CHART SETTINGS
 
     private void applyAllChartSettings() {
         if (forexChartView == null) return;
 
         forexChartView.setChartMode(chartMode);
-
-        forexChartView.setIndicatorEnabled("BOLLINGER", bbEnabled);
-        forexChartView.setIndicatorEnabled("MA", maEnabled);
-        forexChartView.setIndicatorEnabled("MACD", macdEnabled);
-        forexChartView.setIndicatorEnabled("RSI", rsiEnabled);
-        forexChartView.setIndicatorEnabled(
-                "STOCHASTIC", stochasticEnabled);
-        forexChartView.setIndicatorEnabled("VOLUMES", volumesEnabled);
-        forexChartView.setIndicatorEnabled("FRACTALS", fractalsEnabled);
-
-        forexChartView.setIndicatorPeriod("BOLLINGER", bbPeriod);
-        forexChartView.setIndicatorPeriod("MA", maPeriod);
-        forexChartView.setIndicatorPeriod("MACD_FAST", macdFast);
-        forexChartView.setIndicatorPeriod("MACD_SLOW", macdSlow);
-        forexChartView.setIndicatorPeriod("RSI", rsiPeriod);
-        forexChartView.setIndicatorPeriod("STOCHASTIC", stochasticK);
-        forexChartView.setIndicatorPeriod("STOCHASTIC_D", stochasticD);
-        forexChartView.setIndicatorPeriod(
-                "STOCHASTIC_SLOWING", stochasticSlowing);
-
-        forexChartView.setRsiLevels(rsiUpper, rsiLower);
-        forexChartView.setStochasticColors(
-                Color.YELLOW, Color.RED);
 
         applySavedChartColors();
         updateChartModeButtons();
@@ -993,6 +748,7 @@ chartCard.addView(fullscreenButton, params(8));
 
     private void showChartColors() {
         String[] options = new String[colorNames.length];
+
         for (int i = 0; i < colorNames.length; i++) {
             options[i] = colorNames[i];
         }
@@ -1007,28 +763,43 @@ chartCard.addView(fullscreenButton, params(8));
 
     private void showColorChoices(int index) {
         final int[] palette = {
-                Color.WHITE, Color.BLACK, Color.RED, Color.GREEN,
-                Color.BLUE, Color.YELLOW, Color.CYAN, Color.MAGENTA,
-                Color.LTGRAY, Color.DKGRAY, Color.rgb(18, 209, 142),
-                Color.rgb(255, 72, 87), Color.rgb(255, 145, 30),
-                Color.rgb(120, 80, 220), Color.rgb(255, 120, 180),
-                Color.rgb(40, 170, 210), Color.rgb(150, 200, 80),
+                Color.WHITE,
+                Color.BLACK,
+                Color.RED,
+                Color.GREEN,
+                Color.BLUE,
+                Color.YELLOW,
+                Color.CYAN,
+                Color.MAGENTA,
+                Color.LTGRAY,
+                Color.DKGRAY,
+                Color.rgb(18, 209, 142),
+                Color.rgb(255, 72, 87),
+                Color.rgb(255, 145, 30),
+                Color.rgb(120, 80, 220),
+                Color.rgb(255, 120, 180),
+                Color.rgb(40, 170, 210),
+                Color.rgb(150, 200, 80),
                 Color.rgb(210, 170, 90)
         };
 
         String[] names = {
-                "White", "Black", "Red", "Green", "Blue", "Yellow",
-                "Cyan", "Magenta", "Silver", "Dark gray",
-                "Bullish green", "Bearish red", "Orange", "Purple",
-                "Pink", "Sky blue", "Lime", "Gold"
+                "White", "Black", "Red", "Green", "Blue",
+                "Yellow", "Cyan", "Magenta", "Silver",
+                "Dark gray", "Bullish green", "Bearish red",
+                "Orange", "Purple", "Pink", "Sky blue",
+                "Lime", "Gold"
         };
 
         new AlertDialog.Builder(this)
                 .setTitle("COLOR • " + colorNames[index])
                 .setItems(names, (dialog, which) -> {
                     int color = palette[which];
+
                     chartPreferences.edit()
-                            .putInt("color_" + colorRoles[index], color)
+                            .putInt(
+                                    "color_" + colorRoles[index],
+                                    color)
                             .apply();
 
                     if (forexChartView != null) {
@@ -1036,9 +807,11 @@ chartCard.addView(fullscreenButton, params(8));
                                 colorRoles[index], color);
                     }
 
-                    Toast.makeText(this,
+                    Toast.makeText(
+                            this,
                             colorNames[index] + " color saved",
-                            Toast.LENGTH_SHORT).show();
+                            Toast.LENGTH_SHORT
+                    ).show();
                 })
                 .setNegativeButton("CANCEL", null)
                 .show();
@@ -1049,11 +822,14 @@ chartCard.addView(fullscreenButton, params(8));
 
         for (int i = 0; i < colorRoles.length; i++) {
             int color = chartPreferences.getInt(
-                    "color_" + colorRoles[i], defaultChartColors[i]);
+                    "color_" + colorRoles[i],
+                    defaultChartColors[i]);
 
-            forexChartView.setColorRole(colorRoles[i], color);
+            forexChartView.setColorRole(
+                    colorRoles[i], color);
         }
     }
+
 
     // GENERAL PAGE HELPERS
 
@@ -1072,13 +848,15 @@ chartCard.addView(fullscreenButton, params(8));
         pageContainer.addView(scroll, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT));
+
         return body;
     }
 
     private void showPage(int index) {
         if (appPages == null || navigationButtons == null) return;
 
-        currentPage = Math.max(0, Math.min(index, appPages.length - 1));
+        currentPage = Math.max(
+                0, Math.min(index, appPages.length - 1));
 
         for (int i = 0; i < appPages.length; i++) {
             appPages[i].setVisibility(
@@ -1114,6 +892,7 @@ chartCard.addView(fullscreenButton, params(8));
 
     private void updateTradeStyleDisplay(
             TradeStyleEngine.TradeStylePlan plan) {
+
         if (plan == null || !plan.isTradeAllowed()) {
             resetTradeStyleDisplay();
             return;
@@ -1122,22 +901,32 @@ chartCard.addView(fullscreenButton, params(8));
         currentTradeStylePlan = plan;
 
         String styleName;
+
         switch (plan.getStyle()) {
-            case SCALP: styleName = "SCALP"; break;
-            case DAY_TRADE: styleName = "DAY TRADE"; break;
-            case SWING: styleName = "SWING"; break;
+            case SCALP:
+                styleName = "SCALP";
+                break;
+            case DAY_TRADE:
+                styleName = "DAY TRADE";
+                break;
+            case SWING:
+                styleName = "SWING";
+                break;
             default:
                 resetTradeStyleDisplay();
                 return;
         }
 
         int directionColor =
-                plan.getDirection() == Signal.Direction.BUY ? GREEN : RED;
+                plan.getDirection() == Signal.Direction.BUY
+                        ? GREEN : RED;
 
         String styleLabel = "TRADE STYLE • " + styleName
                 + " • " + plan.getDirection().name();
+
         String confidenceLabel = "RULE-BASED CONFIDENCE • "
                 + plan.getConfidence() + "/100";
+
         String reviewLabel = "SUGGESTED REVIEW • "
                 + plan.getReviewTime();
 
@@ -1145,30 +934,37 @@ chartCard.addView(fullscreenButton, params(8));
             homeTradeStyleText.setText(styleLabel);
             homeTradeStyleText.setTextColor(directionColor);
         }
+
         if (homeConfidenceText != null) {
             homeConfidenceText.setText(confidenceLabel);
             homeConfidenceText.setTextColor(WHITE);
         }
+
         if (homeReviewTimeText != null) {
             homeReviewTimeText.setText(reviewLabel);
             homeReviewTimeText.setTextColor(BLUE);
         }
+
         if (homeStyleReasonText != null) {
             homeStyleReasonText.setText(plan.getReason());
             homeStyleReasonText.setTextColor(MUTED);
         }
+
         if (tradeStyleText != null) {
             tradeStyleText.setText(styleLabel);
             tradeStyleText.setTextColor(directionColor);
         }
+
         if (confidenceText != null) {
             confidenceText.setText(confidenceLabel);
             confidenceText.setTextColor(WHITE);
         }
+
         if (reviewTimeText != null) {
             reviewTimeText.setText(reviewLabel);
             reviewTimeText.setTextColor(BLUE);
         }
+
         if (styleReasonText != null) {
             styleReasonText.setText(plan.getReason()
                     + "\n\nReview time is a reminder to reassess the market, "
@@ -1184,31 +980,38 @@ chartCard.addView(fullscreenButton, params(8));
             homeTradeStyleText.setText("TRADE STYLE • WAIT");
             homeTradeStyleText.setTextColor(YELLOW);
         }
+
         if (homeConfidenceText != null) {
             homeConfidenceText.setText("RULE-BASED CONFIDENCE • --");
             homeConfidenceText.setTextColor(MUTED);
         }
+
         if (homeReviewTimeText != null) {
             homeReviewTimeText.setText("SUGGESTED REVIEW • --");
             homeReviewTimeText.setTextColor(MUTED);
         }
+
         if (homeStyleReasonText != null) {
             homeStyleReasonText.setText(
                     "Waiting for confirmed timeframe agreement.");
             homeStyleReasonText.setTextColor(MUTED);
         }
+
         if (tradeStyleText != null) {
             tradeStyleText.setText("TRADE STYLE • WAIT");
             tradeStyleText.setTextColor(YELLOW);
         }
+
         if (confidenceText != null) {
             confidenceText.setText("RULE-BASED CONFIDENCE • --");
             confidenceText.setTextColor(MUTED);
         }
+
         if (reviewTimeText != null) {
             reviewTimeText.setText("SUGGESTED REVIEW • --");
             reviewTimeText.setTextColor(MUTED);
         }
+
         if (styleReasonText != null) {
             styleReasonText.setText(
                     "Waiting for confirmed timeframe agreement.");
@@ -1230,21 +1033,34 @@ chartCard.addView(fullscreenButton, params(8));
             signalText.setText("WAIT");
             signalText.setTextColor(YELLOW);
         }
-        if (priceText != null) priceText.setText("PRICE  --");
-        if (trendText != null) trendText.setText("TREND\n--");
+
+        if (priceText != null) {
+            priceText.setText("PRICE  --");
+        }
+
+        if (trendText != null) {
+            trendText.setText("TREND\n--");
+        }
+
         if (momentumText != null) {
             momentumText.setText("TIMEFRAME\n" + selectedTimeframe);
         }
+
         if (connectionStatus != null) {
             connectionStatus.setText("● LOADING • "
                     + selectedMarket + " • " + selectedTimeframe);
             connectionStatus.setTextColor(YELLOW);
         }
+
         if (forexChartView != null) {
             forexChartView.clearChart();
             forexChartView.clearTradeLevels();
             forexChartView.setChartMode(chartMode);
             applyAllChartSettings();
+        }
+
+        if (signalAlertCoordinator != null) {
+            signalAlertCoordinator.setMarket(selectedMarket);
         }
 
         requestChartCandles();
@@ -1261,18 +1077,21 @@ chartCard.addView(fullscreenButton, params(8));
 
         SimpleDateFormat timeFormat =
                 new SimpleDateFormat("HH:mm:ss", Locale.ENGLISH);
+
         timeFormat.setTimeZone(
                 TimeZone.getTimeZone("Africa/Johannesburg"));
 
         SimpleDateFormat dateFormat =
                 new SimpleDateFormat(
                         "EEEE • dd MMMM yyyy", Locale.ENGLISH);
+
         dateFormat.setTimeZone(
                 TimeZone.getTimeZone("Africa/Johannesburg"));
 
         if (clockText != null) {
             clockText.setText(timeFormat.format(now) + " SAST");
         }
+
         if (dateText != null) {
             dateText.setText(
                     dateFormat.format(now).toUpperCase(Locale.ENGLISH));
@@ -1284,6 +1103,7 @@ chartCard.addView(fullscreenButton, params(8));
             forexStatusText.setText(open
                     ? "● FOREX MARKET OPEN"
                     : "● FOREX MARKET CLOSED");
+
             forexStatusText.setTextColor(open ? GREEN : RED);
         }
 
@@ -1308,23 +1128,40 @@ chartCard.addView(fullscreenButton, params(8));
         if (open && !lastForexOpen && signalRepository != null) {
             requestCurrentSignal();
         }
-        if (!open && lastForexOpen) resetTradeStyleDisplay();
+
+        if (!open && lastForexOpen) {
+            resetTradeStyleDisplay();
+        }
+
+        if (signalAlertCoordinator != null) {
+            if (open) {
+                signalAlertCoordinator.setMarket(selectedMarket);
+                signalAlertCoordinator.start();
+            } else if (lastForexOpen) {
+                signalAlertCoordinator.stop();
+            }
+        }
 
         lastForexOpen = open;
 
         updateSession(sydneySessionText, "SYDNEY",
                 "Australia/Sydney", 8, 17);
+
         updateSession(tokyoSessionText, "TOKYO",
                 "Asia/Tokyo", 9, 18);
+
         updateSession(londonSessionText, "LONDON",
                 "Europe/London", 8, 17);
+
         updateSession(newYorkSessionText, "NEW YORK",
                 "America/New_York", 8, 17);
     }
 
     private boolean isForexMarketOpen(Date date) {
         Calendar ny = Calendar.getInstance(
-                TimeZone.getTimeZone("America/New_York"), Locale.ENGLISH);
+                TimeZone.getTimeZone("America/New_York"),
+                Locale.ENGLISH);
+
         ny.setTime(date);
 
         int day = ny.get(Calendar.DAY_OF_WEEK);
@@ -1334,15 +1171,22 @@ chartCard.addView(fullscreenButton, params(8));
         if (day == Calendar.SATURDAY) return false;
         if (day == Calendar.SUNDAY) return minutes >= 17 * 60;
         if (day == Calendar.FRIDAY) return minutes < 17 * 60;
+
         return true;
     }
 
-    private void updateSession(TextView view, String name, String zone,
-                               int openHour, int closeHour) {
+    private void updateSession(
+            TextView view,
+            String name,
+            String zone,
+            int openHour,
+            int closeHour) {
+
         if (view == null) return;
 
         Calendar local = Calendar.getInstance(
                 TimeZone.getTimeZone(zone), Locale.ENGLISH);
+
         local.setTime(new Date());
 
         int day = local.get(Calendar.DAY_OF_WEEK);
@@ -1351,6 +1195,7 @@ chartCard.addView(fullscreenButton, params(8));
 
         boolean weekend = day == Calendar.SATURDAY
                 || day == Calendar.SUNDAY;
+
         boolean open = !weekend
                 && minutes >= openHour * 60
                 && minutes < closeHour * 60;
@@ -1363,14 +1208,17 @@ chartCard.addView(fullscreenButton, params(8));
 
         format.setTimeZone(
                 TimeZone.getTimeZone("Africa/Johannesburg"));
+
         String sastTime = format.format(new Date());
 
         view.setText("●  " + name + "     "
                 + (open ? "OPEN" : "CLOSED")
                 + "\n    Local " + localTime
-                + "     •     SAST " + sastTime);
+                + "  •  SAST " + sastTime);
+
         view.setTextColor(open ? GREEN : MUTED);
     }
+
 
     private void showMarketClosedState() {
         mtfScanning = false;
@@ -1381,12 +1229,16 @@ chartCard.addView(fullscreenButton, params(8));
             signalText.setText("WAIT");
             signalText.setTextColor(YELLOW);
         }
+
         if (connectionStatus != null) {
             connectionStatus.setText(
                     "● MARKET CLOSED • HISTORICAL DATA");
             connectionStatus.setTextColor(MUTED);
         }
-        if (trendText != null) trendText.setText("TREND\nHISTORICAL");
+
+        if (trendText != null) {
+            trendText.setText("TREND\nHISTORICAL");
+        }
 
         clearTradeLevels();
         resetMtfDisplay();
@@ -1400,15 +1252,21 @@ chartCard.addView(fullscreenButton, params(8));
         marketDataProvider = new TwelveDataProvider(apiKey);
 
         signalRepository = new SignalRepository(
-                marketDataProvider, new SignalRepository.SignalCallback() {
+                marketDataProvider,
+                new SignalRepository.SignalCallback() {
+
             @Override
-            public void onCandles(String symbol, String timeframe,
-                                  List<Candle> candles) {
+            public void onCandles(
+                    String symbol,
+                    String timeframe,
+                    List<Candle> candles) {
+
                 runOnUiThread(() -> {
                     if (forexChartView == null
                             || !selectedMarket.equals(symbol)
                             || !selectedTimeframe.equals(timeframe)
-                            || candles == null || candles.isEmpty()) {
+                            || candles == null
+                            || candles.isEmpty()) {
                         return;
                     }
 
@@ -1427,9 +1285,12 @@ chartCard.addView(fullscreenButton, params(8));
                         updatePrimaryDashboard(signal);
 
                         resetTradeStyleDisplay();
-                        connectionStatus.setText(
-                                "● HISTORICAL SIGNAL DATA • MARKET CLOSED");
-                        connectionStatus.setTextColor(MUTED);
+
+                        if (connectionStatus != null) {
+                            connectionStatus.setText(
+                                    "● HISTORICAL SIGNAL DATA • MARKET CLOSED");
+                            connectionStatus.setTextColor(MUTED);
+                        }
                         return;
                     }
 
@@ -1445,6 +1306,7 @@ chartCard.addView(fullscreenButton, params(8));
                 runOnUiThread(() -> {
                     mtfScanning = false;
                     pendingPrimarySignal = null;
+
                     resetTradeStyleDisplay();
                     clearTradeLevels();
 
@@ -1453,23 +1315,79 @@ chartCard.addView(fullscreenButton, params(8));
                                 "● DATA ERROR • " + selectedMarket);
                         connectionStatus.setTextColor(RED);
                     }
+
                     if (signalText != null) {
                         signalText.setText("WAIT");
                         signalText.setTextColor(YELLOW);
                     }
-                    if (nextMarketText != null && message != null
+
+                    if (nextMarketText != null
+                            && message != null
                             && !message.trim().isEmpty()) {
-                        nextMarketText.setText("DATA ERROR • " + message);
+                        nextMarketText.setText(
+                                "DATA ERROR • " + message);
                     }
+
                     if (mtfConfluenceText != null) {
                         mtfConfluenceText.setText(
                                 "MTF CONFLUENCE • DATA ERROR");
                         mtfConfluenceText.setTextColor(RED);
                     }
+
                     resetMtfDisplay();
                 });
             }
         });
+
+        // BACKGROUND SIGNAL ALERTS
+        signalNotificationManager =
+                new SignalNotificationManager(this);
+
+        backgroundScanner = new BackgroundScanner(
+                (market, timeframe, callback) -> {
+
+            if (marketDataProvider == null) {
+                callback.onError("NO MARKET DATA PROVIDER");
+                return;
+            }
+
+            marketDataProvider.requestCandles(
+                    market,
+                    timeframe,
+                    new MarketDataManager.MarketDataCallback() {
+
+                @Override
+                public void onCandlesReceived(List<Candle> candles) {
+                    if (candles == null || candles.isEmpty()) {
+                        callback.onError("NO CANDLE DATA");
+                        return;
+                    }
+
+                    callback.onSignal(
+                            SignalEngine.analyze(
+                                    market, timeframe, candles));
+                }
+
+                @Override
+                public void onPriceReceived(double price) {
+                }
+
+                @Override
+                public void onError(String message) {
+                    callback.onError(message);
+                }
+            });
+        });
+
+        signalAlertCoordinator = new SignalAlertCoordinator(
+                backgroundScanner,
+                signalNotificationManager);
+
+        signalAlertCoordinator.setMarket(selectedMarket);
+
+        if (isForexMarketOpen(new Date())) {
+            signalAlertCoordinator.start();
+        }
 
         requestChartCandles();
 
@@ -1492,38 +1410,58 @@ chartCard.addView(fullscreenButton, params(8));
             connectionStatus.setTextColor(YELLOW);
         }
 
-        marketDataProvider.requestCandles(market, timeframe,
+        marketDataProvider.requestCandles(
+                market,
+                timeframe,
                 new MarketDataManager.MarketDataCallback() {
+
             @Override
             public void onCandlesReceived(List<Candle> candles) {
                 runOnUiThread(() -> {
                     if (!market.equals(selectedMarket)
-                            || !timeframe.equals(selectedTimeframe)) return;
-
-                    if (candles == null || candles.isEmpty()) {
-                        connectionStatus.setText("● CHART DATA EMPTY");
-                        connectionStatus.setTextColor(RED);
+                            || !timeframe.equals(selectedTimeframe)) {
                         return;
                     }
 
-                    forexChartView.setCandles(candles);
-                    applyAllChartSettings();
+                    if (candles == null || candles.isEmpty()) {
+                        if (connectionStatus != null) {
+                            connectionStatus.setText(
+                                    "● CHART DATA EMPTY");
+                            connectionStatus.setTextColor(RED);
+                        }
+                        return;
+                    }
+
+                    if (forexChartView != null) {
+                        forexChartView.setCandles(candles);
+                        applyAllChartSettings();
+                    }
+
                     updateIndicatorDashboard(market, candles);
 
                     Candle latest = candles.get(candles.size() - 1);
+
                     if (latest != null
-                            && Double.isFinite(latest.getClose())) {
+                            && Double.isFinite(latest.getClose())
+                            && priceText != null) {
                         priceText.setText("PRICE  "
-                                + formatPrice(market, latest.getClose()));
+                                + formatPrice(
+                                        market, latest.getClose()));
                     }
 
-                    boolean open = isForexMarketOpen(new Date());
-                    connectionStatus.setText((open
-                            ? "● LIVE CHART • "
-                            : "● HISTORICAL CHART • ")
-                            + market + " • " + timeframe
-                            + " • " + candles.size() + " CANDLES");
-                    connectionStatus.setTextColor(open ? GREEN : MUTED);
+                    boolean open =
+                            isForexMarketOpen(new Date());
+
+                    if (connectionStatus != null) {
+                        connectionStatus.setText((open
+                                ? "● LIVE CHART • "
+                                : "● HISTORICAL CHART • ")
+                                + market + " • " + timeframe
+                                + " • " + candles.size() + " CANDLES");
+
+                        connectionStatus.setTextColor(
+                                open ? GREEN : MUTED);
+                    }
                 });
             }
 
@@ -1531,7 +1469,8 @@ chartCard.addView(fullscreenButton, params(8));
             public void onPriceReceived(double price) {
                 runOnUiThread(() -> {
                     if (market.equals(selectedMarket)
-                            && Double.isFinite(price)) {
+                            && Double.isFinite(price)
+                            && priceText != null) {
                         priceText.setText(
                                 "PRICE  " + formatPrice(market, price));
                     }
@@ -1542,29 +1481,38 @@ chartCard.addView(fullscreenButton, params(8));
             public void onError(String message) {
                 runOnUiThread(() -> {
                     if (!market.equals(selectedMarket)) return;
-                    connectionStatus.setText("● CHART DATA ERROR");
-                    connectionStatus.setTextColor(RED);
-                    nextMarketText.setText("CHART ERROR • "
-                            + (message == null
-                            ? "UNKNOWN ERROR" : message));
-                    nextMarketText.setTextColor(RED);
+
+                    if (connectionStatus != null) {
+                        connectionStatus.setText(
+                                "● CHART DATA ERROR");
+                        connectionStatus.setTextColor(RED);
+                    }
+
+                    if (nextMarketText != null) {
+                        nextMarketText.setText("CHART ERROR • "
+                                + (message == null
+                                ? "UNKNOWN ERROR" : message));
+                        nextMarketText.setTextColor(RED);
+                    }
                 });
             }
         });
     }
 
+    // TREND AND MOMENTUM SUMMARY
+
     private void updateIndicatorDashboard(
             String market, List<Candle> candles) {
+
         if (candles == null || candles.isEmpty()) return;
 
         String trend = IndicatorEngine.trend(candles, 20, 50);
-        double rsi = IndicatorEngine.rsi(candles, 14);
-        double atr = IndicatorEngine.atr(candles, 14);
         double momentum = IndicatorEngine.momentum(candles, 5);
 
         if (trendText != null) {
             trendText.setText("TREND\n"
                     + (trend == null ? "--" : trend));
+
             trendText.setTextColor(
                     "BULLISH".equalsIgnoreCase(trend) ? GREEN
                             : "BEARISH".equalsIgnoreCase(trend)
@@ -1597,15 +1545,23 @@ chartCard.addView(fullscreenButton, params(8));
         resetMtfDisplay();
         resetTradeStyleDisplay();
 
-        connectionStatus.setText("● SCANNING "
-                + market + " • " + timeframe);
-        connectionStatus.setTextColor(YELLOW);
+        if (connectionStatus != null) {
+            connectionStatus.setText("● SCANNING "
+                    + market + " • " + timeframe);
+            connectionStatus.setTextColor(YELLOW);
+        }
 
-        signalText.setText("WAIT");
-        signalText.setTextColor(YELLOW);
+        if (signalText != null) {
+            signalText.setText("WAIT");
+            signalText.setTextColor(YELLOW);
+        }
+
         clearTradeLevels();
 
-        priceText.setText("PRICE  --");
+        if (priceText != null) {
+            priceText.setText("PRICE  --");
+        }
+
         signalRepository.requestSignal(market, timeframe);
     }
 
@@ -1614,6 +1570,7 @@ chartCard.addView(fullscreenButton, params(8));
             finishMtfWithWait("NO DATA PROVIDER");
             return;
         }
+
         if (!isForexMarketOpen(new Date())) {
             resetTradeStyleDisplay();
             return;
@@ -1622,11 +1579,14 @@ chartCard.addView(fullscreenButton, params(8));
         mtfResults.clear();
         mtfRequestIndex = 0;
         mtfScanning = true;
+
         resetMtfDisplay();
         resetTradeStyleDisplay();
 
-        mtfConfluenceText.setText("MTF CONFLUENCE • SCANNING 1/6");
+        mtfConfluenceText.setText(
+                "MTF CONFLUENCE • SCANNING 1/6");
         mtfConfluenceText.setTextColor(YELLOW);
+
         connectionStatus.setText(
                 "● PRIMARY SIGNAL FOUND • CHECKING TIMEFRAMES");
         connectionStatus.setTextColor(YELLOW);
@@ -1642,6 +1602,7 @@ chartCard.addView(fullscreenButton, params(8));
             resetTradeStyleDisplay();
             return;
         }
+
         if (mtfRequestIndex >= timeframes.length) {
             finishMtfAnalysis();
             return;
@@ -1649,11 +1610,16 @@ chartCard.addView(fullscreenButton, params(8));
 
         final String timeframe = timeframes[mtfRequestIndex];
 
-        mtfConfluenceText.setText("MTF CONFLUENCE • SCANNING "
-                + (mtfRequestIndex + 1) + "/6 • " + timeframe);
+        mtfConfluenceText.setText(
+                "MTF CONFLUENCE • SCANNING "
+                        + (mtfRequestIndex + 1)
+                        + "/6 • " + timeframe);
 
-        marketDataProvider.requestCandles(market, timeframe,
+        marketDataProvider.requestCandles(
+                market,
+                timeframe,
                 new MarketDataManager.MarketDataCallback() {
+
             @Override
             public void onCandlesReceived(List<Candle> candles) {
                 runOnUiThread(() -> {
@@ -1679,7 +1645,8 @@ chartCard.addView(fullscreenButton, params(8));
             public void onPriceReceived(double price) {
                 runOnUiThread(() -> {
                     if (Double.isFinite(price)
-                            && market.equals(selectedMarket)) {
+                            && market.equals(selectedMarket)
+                            && priceText != null) {
                         priceText.setText(
                                 "PRICE  " + formatPrice(market, price));
                     }
@@ -1691,13 +1658,16 @@ chartCard.addView(fullscreenButton, params(8));
                 runOnUiThread(() -> {
                     if (!mtfScanning) return;
 
-                    mtfResults.add(
+                    MultiTimeframeEngine.TimeframeResult result =
                             new MultiTimeframeEngine.TimeframeResult(
-                                    timeframe, Signal.Direction.WAIT,
-                                    "DATA ERROR", Double.NaN, Double.NaN));
+                                    timeframe,
+                                    Signal.Direction.WAIT,
+                                    "DATA ERROR",
+                                    Double.NaN,
+                                    Double.NaN);
 
-                    updateMtfBox(timeframe,
-                            mtfResults.get(mtfResults.size() - 1));
+                    mtfResults.add(result);
+                    updateMtfBox(timeframe, result);
                     mtfRequestIndex++;
 
                     if (mtfRequestIndex < timeframes.length) {
@@ -1722,26 +1692,33 @@ chartCard.addView(fullscreenButton, params(8));
                 MultiTimeframeEngine.calculateConfluence(mtfResults);
 
         mtfConfluenceText.setText("MTF CONFLUENCE • BUY "
-                + confluence.getBuyCount() + " • SELL "
-                + confluence.getSellCount() + " • WAIT "
-                + confluence.getWaitCount() + " • STRENGTH "
-                + confluence.getStrength());
+                + confluence.getBuyCount()
+                + " • SELL " + confluence.getSellCount()
+                + " • WAIT " + confluence.getWaitCount()
+                + " • STRENGTH " + confluence.getStrength());
 
         if (pendingPrimarySignal == null) {
             finishMtfWithWait("NO PRIMARY SIGNAL");
             return;
         }
 
-        Signal.Direction primary = pendingPrimarySignal.getDirection();
+        Signal.Direction primary =
+                pendingPrimarySignal.getDirection();
+
         Signal.Direction mtf = confluence.getDirection();
 
-        boolean primaryTrade = primary == Signal.Direction.BUY
+        boolean primaryTrade =
+                primary == Signal.Direction.BUY
                 || primary == Signal.Direction.SELL;
-        boolean mtfTrade = mtf == Signal.Direction.BUY
+
+        boolean mtfTrade =
+                mtf == Signal.Direction.BUY
                 || mtf == Signal.Direction.SELL;
 
-        boolean confirmed = primaryTrade && mtfTrade
-                && primary == mtf && confluence.getStrength() >= 3;
+        boolean confirmed = primaryTrade
+                && mtfTrade
+                && primary == mtf
+                && confluence.getStrength() >= 3;
 
         if (confirmed) {
             TradeStyleEngine.TradeStylePlan plan =
@@ -1756,25 +1733,36 @@ chartCard.addView(fullscreenButton, params(8));
                 return;
             }
 
-            int color = mtf == Signal.Direction.BUY ? GREEN : RED;
+            int color = mtf == Signal.Direction.BUY
+                    ? GREEN : RED;
+
             mtfConfluenceText.setTextColor(color);
-            connectionStatus.setText("● MTF CONFIRMED • "
-                    + mtf.name() + " • STRENGTH "
-                    + confluence.getStrength());
+
+            connectionStatus.setText(
+                    "● MTF CONFIRMED • " + mtf.name()
+                            + " • STRENGTH "
+                            + confluence.getStrength());
             connectionStatus.setTextColor(color);
 
             updateTradeStyleDisplay(plan);
 
             if (forexChartView != null) {
-                forexChartView.setTradeLevels(pendingPrimarySignal);
+                forexChartView.setTradeLevels(
+                        pendingPrimarySignal);
             }
+
             updateDashboard(pendingPrimarySignal);
+
         } else {
             mtfConfluenceText.setTextColor(YELLOW);
-            connectionStatus.setText("● MTF NOT CONFIRMED • WAIT");
+
+            connectionStatus.setText(
+                    "● MTF NOT CONFIRMED • WAIT");
             connectionStatus.setTextColor(YELLOW);
+
             signalText.setText("WAIT");
             signalText.setTextColor(YELLOW);
+
             resetTradeStyleDisplay();
             clearTradeLevels();
         }
@@ -1783,6 +1771,7 @@ chartCard.addView(fullscreenButton, params(8));
     private void finishMtfWithWait(String reason) {
         mtfScanning = false;
         pendingPrimarySignal = null;
+
         resetTradeStyleDisplay();
 
         if (signalText != null) {
@@ -1795,11 +1784,13 @@ chartCard.addView(fullscreenButton, params(8));
         if (forexChartView != null) {
             forexChartView.clearTradeLevels();
         }
+
         if (mtfConfluenceText != null) {
             mtfConfluenceText.setText(
                     "MTF CONFLUENCE • WAIT • " + reason);
             mtfConfluenceText.setTextColor(YELLOW);
         }
+
         if (connectionStatus != null) {
             connectionStatus.setText("● WAIT • " + reason);
             connectionStatus.setTextColor(YELLOW);
@@ -1815,7 +1806,8 @@ chartCard.addView(fullscreenButton, params(8));
         setMtfBox(mtf1dText, "1D", Signal.Direction.WAIT);
 
         if (mtfConfluenceText != null) {
-            mtfConfluenceText.setText("MTF CONFLUENCE • WAIT");
+            mtfConfluenceText.setText(
+                    "MTF CONFLUENCE • WAIT");
             mtfConfluenceText.setTextColor(YELLOW);
         }
     }
@@ -1823,9 +1815,12 @@ chartCard.addView(fullscreenButton, params(8));
     private void updateMtfBox(
             String timeframe,
             MultiTimeframeEngine.TimeframeResult result) {
+
         if (result != null) {
-            setMtfBox(getMtfTextView(timeframe),
-                    timeframe, result.getDirection());
+            setMtfBox(
+                    getMtfTextView(timeframe),
+                    timeframe,
+                    result.getDirection());
         }
     }
 
@@ -1838,165 +1833,24 @@ chartCard.addView(fullscreenButton, params(8));
         return mtf1dText;
     }
 
-    private void setMtfBox(TextView view, String timeframe,
-                           Signal.Direction direction) {
+    private void setMtfBox(
+            TextView view,
+            String timeframe,
+            Signal.Direction direction) {
+
         if (view == null) return;
 
-        String label = direction == null ? "WAIT" : direction.name();
+        String label = direction == null
+                ? "WAIT" : direction.name();
+
         view.setText(timeframe + "\n" + label);
-        view.setTextColor(direction == Signal.Direction.BUY ? GREEN
-                : direction == Signal.Direction.SELL ? RED : YELLOW);
+
+        view.setTextColor(
+                direction == Signal.Direction.BUY ? GREEN
+                : direction == Signal.Direction.SELL ? RED
+                : YELLOW);
     }
 
-    // DASHBOARD AND TRADE LEVELS
-
-    private void updatePrimaryDashboard(Signal signal) {
-        if (signal == null
-                || !selectedMarket.equals(signal.getSymbol())
-                || !selectedTimeframe.equals(signal.getTimeframe())) {
-            return;
-        }
-
-        if (!Double.isNaN(signal.getEntry())) {
-            priceText.setText("PRICE  "
-                    + formatPrice(signal.getSymbol(), signal.getEntry()));
-        }
-
-        trendText.setText("TREND\n" + signal.getTrend());
-        momentumText.setText("TIMEFRAME\n" + signal.getTimeframe());
-    }
-
-    private void updateDashboard(Signal signal) {
-        if (signal == null) return;
-
-        if (!isForexMarketOpen(new Date())) {
-            updatePrimaryDashboard(signal);
-            resetTradeStyleDisplay();
-            return;
-        }
-
-        if (!selectedMarket.equals(signal.getSymbol())
-                || !selectedTimeframe.equals(signal.getTimeframe())) {
-            return;
-        }
-
-        marketName.setText(signal.getSymbol());
-        connectionStatus.setText("● LIVE DATA • MTF CONFIRMED • "
-                + signal.getSymbol() + " • " + signal.getTimeframe());
-
-        connectionStatus.setTextColor(
-                signal.getDirection() == Signal.Direction.BUY ? GREEN
-                        : signal.getDirection() == Signal.Direction.SELL
-                        ? RED : YELLOW);
-
-        priceText.setText(Double.isNaN(signal.getEntry()) ? "PRICE  --"
-                : "PRICE  " + formatPrice(
-                        signal.getSymbol(), signal.getEntry()));
-
-        signalText.setText(signal.getDirection().name());
-        signalText.setTextColor(
-                signal.getDirection() == Signal.Direction.BUY ? GREEN
-                        : signal.getDirection() == Signal.Direction.SELL
-                        ? RED : YELLOW);
-
-        trendText.setText("TREND\n" + signal.getTrend());
-        momentumText.setText("TIMEFRAME\n" + signal.getTimeframe());
-
-        if (signal.getDirection() == Signal.Direction.BUY
-                || signal.getDirection() == Signal.Direction.SELL) {
-            entryText.setText("ENTRY                         "
-                    + formatPrice(signal.getSymbol(), signal.getEntry()));
-            stopLossText.setText("STOP LOSS                  "
-                    + formatPrice(signal.getSymbol(), signal.getStopLoss()));
-            tp1Text.setText("TAKE PROFIT 1          "
-                    + formatPrice(signal.getSymbol(),
-                    signal.getTakeProfit1()));
-            tp2Text.setText("TAKE PROFIT 2          "
-                    + formatPrice(signal.getSymbol(),
-                    signal.getTakeProfit2()));
-            tp3Text.setText("TAKE PROFIT 3          "
-                    + formatPrice(signal.getSymbol(),
-                    signal.getTakeProfit3()));
-
-            if (forexChartView != null) {
-                forexChartView.setTradeLevels(signal);
-            }
-        } else {
-            resetTradeStyleDisplay();
-            clearTradeLevels();
-        }
-    }
-
-    private void clearTradeLevels() {
-        if (entryText != null) {
-            entryText.setText("ENTRY                         --");
-        }
-        if (stopLossText != null) {
-            stopLossText.setText("STOP LOSS                  --");
-        }
-        if (tp1Text != null) {
-            tp1Text.setText("TAKE PROFIT 1          --");
-        }
-        if (tp2Text != null) {
-            tp2Text.setText("TAKE PROFIT 2          --");
-        }
-        if (tp3Text != null) {
-            tp3Text.setText("TAKE PROFIT 3          --");
-        }
-        if (forexChartView != null) {
-            forexChartView.clearTradeLevels();
-        }
-    }
-
-    // UI COMPONENT HELPERS
-
-    private String formatPrice(String symbol, double value) {
-        if (!Double.isFinite(value)) return "--";
-        if ("USD/JPY".equalsIgnoreCase(symbol)) {
-            return String.format(Locale.US, "%.3f", value);
-        }
-        if ("XAU/USD".equalsIgnoreCase(symbol)) {
-            return String.format(Locale.US, "%.2f", value);
-        }
-        return String.format(Locale.US, "%.5f", value);
-    }
-
-    private int dp(float value) {
-        return (int) (value
-                * getResources().getDisplayMetrics().density + 0.5f);
-    }
-
-    private TextView createText(
-            String text, float size, int color, boolean bold) {
-        TextView view = new TextView(this);
-        view.setText(text);
-        view.setTextSize(size);
-        view.setTextColor(color);
-        if (bold) {
-            view.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
-        }
-        return view;
-    }
-
-    private TextView createSmallLabel(String text) {
-        return createText(text, 11, MUTED, true);
-    }
-
-    private Button createButton(String text) {
-        Button button = new Button(this);
-        button.setText(text);
-        button.setTextSize(12);
-        button.setTextColor(Color.WHITE);
-        button.setAllCaps(false);
-        button.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
-        button.setMinHeight(dp(46));
-
-        GradientDrawable background = new GradientDrawable();
-        background.setColor(BUTTON_BACKGROUND);
-        background.setCornerRadius(dp(12));
-        button.setBackground(background);
-        return button;
-    }
 
     private TextView createSessionRow(String name) {
         TextView view = createText(
@@ -2009,31 +1863,43 @@ chartCard.addView(fullscreenButton, params(8));
 
     private Spinner createSpinner(String[] values) {
         Spinner spinner = new Spinner(this);
-        ArrayAdapter<String> adapter = new ArrayAdapter<String>(
-                this, android.R.layout.simple_spinner_item, values) {
+
+        ArrayAdapter<String> adapter =
+                new ArrayAdapter<String>(
+                        this,
+                        android.R.layout.simple_spinner_item,
+                        values) {
+
             private TextView styleText(View view) {
                 TextView text = (TextView) view;
-                text.setTextColor(lightMode ? Color.BLACK : Color.WHITE);
+                text.setTextColor(
+                        lightMode ? Color.BLACK : Color.WHITE);
                 text.setBackgroundColor(
                         lightMode ? Color.WHITE : FIELD_BACKGROUND);
-                text.setPadding(dp(12), dp(10), dp(12), dp(10));
+                text.setPadding(
+                        dp(12), dp(10), dp(12), dp(10));
                 return text;
             }
 
             @Override
-            public View getView(int position, View convertView,
-                                android.view.ViewGroup parent) {
+            public View getView(
+                    int position,
+                    View convertView,
+                    android.view.ViewGroup parent) {
                 return styleText(super.getView(
                         position, convertView, parent));
             }
 
             @Override
-            public View getDropDownView(int position, View convertView,
-                                        android.view.ViewGroup parent) {
+            public View getDropDownView(
+                    int position,
+                    View convertView,
+                    android.view.ViewGroup parent) {
                 return styleText(super.getDropDownView(
                         position, convertView, parent));
             }
         };
+
         spinner.setAdapter(adapter);
         return spinner;
     }
@@ -2042,7 +1908,8 @@ chartCard.addView(fullscreenButton, params(8));
         TextView view = createText(
                 label + "\n" + value, 14, WHITE, true);
         view.setGravity(Gravity.CENTER);
-        view.setPadding(dp(10), dp(15), dp(10), dp(15));
+        view.setPadding(
+                dp(10), dp(15), dp(10), dp(15));
         view.setBackground(createRoundedBackground(
                 FIELD_BACKGROUND, CARD_BORDER, 14));
         return view;
@@ -2050,8 +1917,10 @@ chartCard.addView(fullscreenButton, params(8));
 
     private TextView createTradeRow(String label, int color) {
         TextView view = createText(
-                label + "                         --", 13, color, true);
-        view.setPadding(dp(12), dp(14), dp(8), dp(14));
+                label + "                         --",
+                13, color, true);
+        view.setPadding(
+                dp(12), dp(14), dp(8), dp(14));
         view.setBackground(createRoundedBackground(
                 FIELD_BACKGROUND, CARD_BORDER, 10));
         return view;
@@ -2060,7 +1929,8 @@ chartCard.addView(fullscreenButton, params(8));
     private TextView createTimeframeBox(String text) {
         TextView view = createText(text, 12, WHITE, true);
         view.setGravity(Gravity.CENTER);
-        view.setPadding(dp(16), dp(14), dp(16), dp(14));
+        view.setPadding(
+                dp(16), dp(14), dp(16), dp(14));
         view.setBackground(createRoundedBackground(
                 FIELD_BACKGROUND, CARD_BORDER, 12));
 
@@ -2082,7 +1952,8 @@ chartCard.addView(fullscreenButton, params(8));
     private LinearLayout createCard() {
         LinearLayout card = new LinearLayout(this);
         card.setOrientation(LinearLayout.VERTICAL);
-        card.setPadding(dp(14), dp(14), dp(14), dp(14));
+        card.setPadding(
+                dp(14), dp(14), dp(14), dp(14));
         card.setBackground(createRoundedBackground(
                 CARD, CARD_BORDER, 16));
         return card;
@@ -2093,9 +1964,11 @@ chartCard.addView(fullscreenButton, params(8));
         GradientDrawable background = new GradientDrawable();
         background.setColor(color);
         background.setCornerRadius(dp(radius));
+
         if (strokeColor != 0) {
             background.setStroke(dp(1), strokeColor);
         }
+
         return background;
     }
 
@@ -2111,203 +1984,183 @@ chartCard.addView(fullscreenButton, params(8));
     private LinearLayout.LayoutParams weightParams() {
         LinearLayout.LayoutParams p =
                 new LinearLayout.LayoutParams(
-                        0, LinearLayout.LayoutParams.WRAP_CONTENT, 1);
+                        0,
+                        LinearLayout.LayoutParams.WRAP_CONTENT,
+                        1);
         p.setMargins(dp(4), 0, dp(4), 0);
         return p;
     }
 
-    
-// ======================================
-// FULL-SCREEN LANDSCAPE CHART
-// ======================================
+    // FULL-SCREEN LANDSCAPE CHART
 
-private void enterFullscreenChart() {
+    private void enterFullscreenChart() {
+        if (fullscreenChart || forexChartView == null) {
+            return;
+        }
 
-    if (fullscreenChart || forexChartView == null) {
-        return;
-    }
+        if (!(forexChartView.getParent() instanceof ViewGroup)) {
+            return;
+        }
 
-    if (!(forexChartView.getParent() instanceof ViewGroup)) {
-        return;
-    }
+        chartOriginalParent =
+                (ViewGroup) forexChartView.getParent();
 
-    // Remember the chart's original location.
-    chartOriginalParent =
-            (ViewGroup) forexChartView.getParent();
+        chartOriginalIndex =
+                chartOriginalParent.indexOfChild(forexChartView);
 
-    chartOriginalIndex =
-            chartOriginalParent.indexOfChild(forexChartView);
+        chartOriginalLayoutParams =
+                forexChartView.getLayoutParams();
 
-    chartOriginalLayoutParams =
-            forexChartView.getLayoutParams();
+        chartOriginalParent.removeView(forexChartView);
 
-    // Remove chart from normal dashboard.
-    chartOriginalParent.removeView(forexChartView);
+        View decorView = getWindow().getDecorView();
 
-    // Remember current screen settings.
-    View decorView = getWindow().getDecorView();
+        previousSystemUiVisibility =
+                decorView.getSystemUiVisibility();
 
-    previousSystemUiVisibility =
-            decorView.getSystemUiVisibility();
+        previousRequestedOrientation =
+                getRequestedOrientation();
 
-    previousRequestedOrientation =
-            getRequestedOrientation();
+        fullscreenChartOverlay = new FrameLayout(this);
+        fullscreenChartOverlay.setBackgroundColor(Color.BLACK);
+        fullscreenChartOverlay.setFocusableInTouchMode(true);
 
-    // Create full-screen container.
-    fullscreenChartOverlay = new FrameLayout(this);
+        FrameLayout.LayoutParams chartParams =
+                new FrameLayout.LayoutParams(
+                        FrameLayout.LayoutParams.MATCH_PARENT,
+                        FrameLayout.LayoutParams.MATCH_PARENT);
 
-    fullscreenChartOverlay.setBackgroundColor(Color.BLACK);
+        fullscreenChartOverlay.addView(
+                forexChartView, chartParams);
 
-    fullscreenChartOverlay.setFocusableInTouchMode(true);
+        Button exitButton =
+                createSmallActionButton("EXIT FULL SCREEN  ✕");
 
-    // Add chart to fill the screen.
-    FrameLayout.LayoutParams chartParams =
-            new FrameLayout.LayoutParams(
-                    FrameLayout.LayoutParams.MATCH_PARENT,
-                    FrameLayout.LayoutParams.MATCH_PARENT);
+        exitButton.setOnClickListener(
+                v -> exitFullscreenChart());
 
-    fullscreenChartOverlay.addView(
-            forexChartView, chartParams);
+        FrameLayout.LayoutParams exitParams =
+                new FrameLayout.LayoutParams(
+                        FrameLayout.LayoutParams.WRAP_CONTENT,
+                        FrameLayout.LayoutParams.WRAP_CONTENT,
+                        Gravity.TOP | Gravity.END);
 
-    // Add an exit button.
-    Button exitButton =
-            createSmallActionButton("EXIT FULL SCREEN  ✕");
+        exitParams.setMargins(
+                dp(8), dp(8), dp(12), dp(8));
 
-    exitButton.setOnClickListener(
-            v -> exitFullscreenChart());
-
-    FrameLayout.LayoutParams exitParams =
-            new FrameLayout.LayoutParams(
-                    FrameLayout.LayoutParams.WRAP_CONTENT,
-                    FrameLayout.LayoutParams.WRAP_CONTENT,
-                    Gravity.TOP | Gravity.END);
-
-    exitParams.setMargins(
-            dp(8), dp(8), dp(12), dp(8));
-
-    fullscreenChartOverlay.addView(
-            exitButton, exitParams);
-
-    // Put the overlay above the entire app content.
-    FrameLayout content =
-            findViewById(android.R.id.content);
-
-    content.addView(
-            fullscreenChartOverlay,
-            new FrameLayout.LayoutParams(
-                    FrameLayout.LayoutParams.MATCH_PARENT,
-                    FrameLayout.LayoutParams.MATCH_PARENT));
-
-    // Hide Android status and navigation bars.
-    int immersiveFlags =
-            View.SYSTEM_UI_FLAG_FULLSCREEN
-            | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
-            | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
-            | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
-            | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
-            | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION;
-
-    decorView.setSystemUiVisibility(immersiveFlags);
-
-    fullscreenChart = true;
-
-    // Rotate the phone to landscape.
-    setRequestedOrientation(
-            ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
-
-    fullscreenChartOverlay.requestFocus();
-}
-
-// EXIT FULL-SCREEN CHART
-
-private void exitFullscreenChart() {
-
-    if (!fullscreenChart) {
-        return;
-    }
-
-    // Remove chart from the full-screen container.
-    if (forexChartView != null
-            && forexChartView.getParent() instanceof ViewGroup) {
-
-        ((ViewGroup) forexChartView.getParent())
-                .removeView(forexChartView);
-    }
-
-    // Remove the overlay.
-    if (fullscreenChartOverlay != null) {
+        fullscreenChartOverlay.addView(
+                exitButton, exitParams);
 
         FrameLayout content =
                 findViewById(android.R.id.content);
 
-        content.removeView(fullscreenChartOverlay);
+        content.addView(
+                fullscreenChartOverlay,
+                new FrameLayout.LayoutParams(
+                        FrameLayout.LayoutParams.MATCH_PARENT,
+                        FrameLayout.LayoutParams.MATCH_PARENT));
 
-        fullscreenChartOverlay = null;
+        int immersiveFlags =
+                View.SYSTEM_UI_FLAG_FULLSCREEN
+                | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION;
+
+        decorView.setSystemUiVisibility(immersiveFlags);
+        fullscreenChart = true;
+
+        setRequestedOrientation(
+                android.content.pm.ActivityInfo
+                        .SCREEN_ORIENTATION_LANDSCAPE);
+
+        fullscreenChartOverlay.requestFocus();
     }
 
-    // Restore chart to its original dashboard position.
-    if (chartOriginalParent != null
-            && forexChartView != null) {
+    private void exitFullscreenChart() {
+        if (!fullscreenChart) {
+            return;
+        }
 
-        int index = Math.max(
-                0,
-                Math.min(
-                        chartOriginalIndex,
-                        chartOriginalParent.getChildCount()));
+        if (forexChartView != null
+                && forexChartView.getParent() instanceof ViewGroup) {
+            ((ViewGroup) forexChartView.getParent())
+                    .removeView(forexChartView);
+        }
 
-        chartOriginalParent.addView(
-                forexChartView,
-                index,
-                chartOriginalLayoutParams);
+        if (fullscreenChartOverlay != null) {
+            FrameLayout content =
+                    findViewById(android.R.id.content);
+
+            content.removeView(fullscreenChartOverlay);
+            fullscreenChartOverlay = null;
+        }
+
+        if (chartOriginalParent != null
+                && forexChartView != null) {
+
+            int index = Math.max(
+                    0,
+                    Math.min(
+                            chartOriginalIndex,
+                            chartOriginalParent.getChildCount()));
+
+            chartOriginalParent.addView(
+                    forexChartView,
+                    index,
+                    chartOriginalLayoutParams);
+        }
+
+        fullscreenChart = false;
+
+        getWindow().getDecorView()
+                .setSystemUiVisibility(
+                        previousSystemUiVisibility);
+
+        setRequestedOrientation(
+                previousRequestedOrientation);
+
+        if (forexChartView != null) {
+            forexChartView.requestLayout();
+        }
+
+        chartOriginalParent = null;
+        chartOriginalLayoutParams = null;
+        chartOriginalIndex = -1;
     }
 
-    fullscreenChart = false;
+    @Override
+    public void onBackPressed() {
+        if (fullscreenChart) {
+            exitFullscreenChart();
+            return;
+        }
 
-    // Restore Android system bars.
-    getWindow().getDecorView()
-            .setSystemUiVisibility(
-                    previousSystemUiVisibility);
-
-    // Restore original orientation.
-    setRequestedOrientation(
-            previousRequestedOrientation);
-
-    if (forexChartView != null) {
-        forexChartView.requestLayout();
+        super.onBackPressed();
     }
 
-    chartOriginalParent = null;
-    chartOriginalLayoutParams = null;
-    chartOriginalIndex = -1;
+    @Override
+    protected void onDestroy() {
+        clockHandler.removeCallbacks(clockRunnable);
+        chartRefreshHandler.removeCallbacks(chartRefreshRunnable);
+
+        if (signalAlertCoordinator != null) {
+            signalAlertCoordinator.stop();
+        }
+
+        if (backgroundScanner != null) {
+            backgroundScanner.stop();
+        }
+
+        if (signalRepository != null) {
+            signalRepository.stop();
+        }
+
+        if (marketDataProvider != null) {
+            marketDataProvider.stop();
+        }
+
+        super.onDestroy();
+    }
 }
-
-
-// PHONE BACK BUTTON
-
-@Override
-public void onBackPressed() {
-
-    if (fullscreenChart) {
-        exitFullscreenChart();
-        return;
-    }
-
-    super.onBackPressed();
-}
-
-@Override
-protected void onDestroy() {
-    clockHandler.removeCallbacks(clockRunnable);
-
-    if (signalRepository != null) {
-        signalRepository.stop();
-    }
-    if (marketDataProvider != null) {
-        marketDataProvider.stop();
-    }
-
-    super.onDestroy();
-}
-
-}
- 
