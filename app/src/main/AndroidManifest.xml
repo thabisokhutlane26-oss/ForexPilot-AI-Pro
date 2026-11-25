@@ -2,21 +2,20 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
         android:allowBackup="true"
         android:label="ForexPilot AI Pro"
- 
-    android:icon="@drawable/forexpilot_icon"
-       
- android:supportsRtl="true"
+        android:icon="@drawable/forexpilot_icon"
+        android:supportsRtl="true"
         android:theme="@style/AppTheme">
 
         <activity
-    android:name=".MainActivity"
-    android:screenOrientation="unspecified"
-    android:configChanges="orientation|screenSize|keyboardHidden"
-    android:exported="true">
+            android:name=".MainActivity"
+            android:screenOrientation="unspecified"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:exported="true">
 
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
