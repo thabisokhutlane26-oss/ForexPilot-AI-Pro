@@ -1272,7 +1272,6 @@ public class MainActivity extends Activity {
 
                     forexChartView.setCandles(candles);
                     applyAllChartSettings();
-                    updateIndicatorDashboard(symbol, candles);
                 });
             }
 
@@ -1437,8 +1436,6 @@ public class MainActivity extends Activity {
                         applyAllChartSettings();
                     }
 
-                    updateIndicatorDashboard(market, candles);
-
                     Candle latest = candles.get(candles.size() - 1);
 
                     if (latest != null
@@ -1497,33 +1494,6 @@ public class MainActivity extends Activity {
                 });
             }
         });
-    }
-
-    // TREND AND MOMENTUM SUMMARY
-
-    private void updateIndicatorDashboard(
-            String market, List<Candle> candles) {
-
-        if (candles == null || candles.isEmpty()) return;
-
-        String trend = IndicatorEngine.trend(candles, 20, 50);
-        double momentum = IndicatorEngine.momentum(candles, 5);
-
-        if (trendText != null) {
-            trendText.setText("TREND\n"
-                    + (trend == null ? "--" : trend));
-
-            trendText.setTextColor(
-                    "BULLISH".equalsIgnoreCase(trend) ? GREEN
-                            : "BEARISH".equalsIgnoreCase(trend)
-                            ? RED : WHITE);
-        }
-
-        if (momentumText != null) {
-            momentumText.setText(Double.isFinite(momentum)
-                    ? "MOMENTUM\n" + formatPrice(market, momentum)
-                    : "TIMEFRAME\n" + selectedTimeframe);
-        }
     }
 
     // SIGNAL SCANNER
@@ -1798,6 +1768,7 @@ public class MainActivity extends Activity {
     }
 
     private void resetMtfDisplay() {
+
         setMtfBox(mtf5mText, "5M", Signal.Direction.WAIT);
         setMtfBox(mtf15mText, "15M", Signal.Direction.WAIT);
         setMtfBox(mtf30mText, "30M", Signal.Direction.WAIT);
@@ -1850,7 +1821,6 @@ public class MainActivity extends Activity {
                 : direction == Signal.Direction.SELL ? RED
                 : YELLOW);
     }
-
 
     private TextView createSessionRow(String name) {
         TextView view = createText(
@@ -1989,6 +1959,171 @@ public class MainActivity extends Activity {
                         1);
         p.setMargins(dp(4), 0, dp(4), 0);
         return p;
+    }
+
+    // REQUIRED MISSING HELPERS
+
+    private int dp(float value) {
+        return (int) (value
+                * getResources().getDisplayMetrics().density + 0.5f);
+    }
+
+    private TextView createText(
+            String text, float size, int color, boolean bold) {
+
+        TextView view = new TextView(this);
+        view.setText(text);
+        view.setTextSize(size);
+        view.setTextColor(color);
+
+        if (bold) {
+            view.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        }
+
+        return view;
+    }
+
+    private TextView createSmallLabel(String text) {
+        return createText(text, 11, MUTED, true);
+    }
+
+    private Button createButton(String text) {
+        Button button = new Button(this);
+        button.setText(text);
+        button.setTextSize(12);
+        button.setTextColor(Color.WHITE);
+        button.setAllCaps(false);
+        button.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        button.setMinHeight(dp(46));
+
+        GradientDrawable background = new GradientDrawable();
+        background.setColor(BUTTON_BACKGROUND);
+        background.setCornerRadius(dp(12));
+        button.setBackground(background);
+
+        return button;
+    }
+
+    private String formatPrice(String symbol, double value) {
+        if (!Double.isFinite(value)) return "--";
+
+        if ("USD/JPY".equalsIgnoreCase(symbol)) {
+            return String.format(Locale.US, "%.3f", value);
+        }
+
+        if ("XAU/USD".equalsIgnoreCase(symbol)) {
+            return String.format(Locale.US, "%.2f", value);
+        }
+
+        return String.format(Locale.US, "%.5f", value);
+    }
+
+    private void updatePrimaryDashboard(Signal signal) {
+        if (signal == null
+                || !selectedMarket.equals(signal.getSymbol())
+                || !selectedTimeframe.equals(signal.getTimeframe())) {
+            return;
+        }
+
+        if (!Double.isNaN(signal.getEntry())) {
+            priceText.setText("PRICE  "
+                    + formatPrice(signal.getSymbol(), signal.getEntry()));
+        }
+
+        trendText.setText("TREND\n" + signal.getTrend());
+        momentumText.setText("TIMEFRAME\n" + signal.getTimeframe());
+    }
+
+    private void updateDashboard(Signal signal) {
+        if (signal == null) return;
+
+        if (!isForexMarketOpen(new Date())) {
+            updatePrimaryDashboard(signal);
+            resetTradeStyleDisplay();
+            return;
+        }
+
+        if (!selectedMarket.equals(signal.getSymbol())
+                || !selectedTimeframe.equals(signal.getTimeframe())) {
+            return;
+        }
+
+        marketName.setText(signal.getSymbol());
+        connectionStatus.setText("● LIVE DATA • MTF CONFIRMED • "
+                + signal.getSymbol() + " • " + signal.getTimeframe());
+
+        connectionStatus.setTextColor(
+                signal.getDirection() == Signal.Direction.BUY ? GREEN
+                        : signal.getDirection() == Signal.Direction.SELL
+                        ? RED : YELLOW);
+
+        priceText.setText(Double.isNaN(signal.getEntry()) ? "PRICE  --"
+                : "PRICE  " + formatPrice(
+                        signal.getSymbol(), signal.getEntry()));
+
+        signalText.setText(signal.getDirection().name());
+        signalText.setTextColor(
+                signal.getDirection() == Signal.Direction.BUY ? GREEN
+                        : signal.getDirection() == Signal.Direction.SELL
+                        ? RED : YELLOW);
+
+        trendText.setText("TREND\n" + signal.getTrend());
+        momentumText.setText("TIMEFRAME\n" + signal.getTimeframe());
+
+        if (signal.getDirection() == Signal.Direction.BUY
+                || signal.getDirection() == Signal.Direction.SELL) {
+
+            entryText.setText("ENTRY                         "
+                    + formatPrice(signal.getSymbol(), signal.getEntry()));
+
+            stopLossText.setText("STOP LOSS                  "
+                    + formatPrice(signal.getSymbol(), signal.getStopLoss()));
+
+            tp1Text.setText("TAKE PROFIT 1          "
+                    + formatPrice(signal.getSymbol(),
+                    signal.getTakeProfit1()));
+
+            tp2Text.setText("TAKE PROFIT 2          "
+                    + formatPrice(signal.getSymbol(),
+                    signal.getTakeProfit2()));
+
+            tp3Text.setText("TAKE PROFIT 3          "
+                    + formatPrice(signal.getSymbol(),
+                    signal.getTakeProfit3()));
+
+            if (forexChartView != null) {
+                forexChartView.setTradeLevels(signal);
+            }
+        } else {
+            resetTradeStyleDisplay();
+            clearTradeLevels();
+        }
+    }
+
+    private void clearTradeLevels() {
+        if (entryText != null) {
+            entryText.setText("ENTRY                         --");
+        }
+
+        if (stopLossText != null) {
+            stopLossText.setText("STOP LOSS                  --");
+        }
+
+        if (tp1Text != null) {
+            tp1Text.setText("TAKE PROFIT 1          --");
+        }
+
+        if (tp2Text != null) {
+            tp2Text.setText("TAKE PROFIT 2          --");
+        }
+
+        if (tp3Text != null) {
+            tp3Text.setText("TAKE PROFIT 3          --");
+        }
+
+        if (forexChartView != null) {
+            forexChartView.clearTradeLevels();
+        }
     }
 
     // FULL-SCREEN LANDSCAPE CHART
