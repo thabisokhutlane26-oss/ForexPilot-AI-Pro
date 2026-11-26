@@ -1100,6 +1100,52 @@ public class MainActivity extends Activity {
         }
     }
 
+private void resetTradeStyleDisplay() {
+    currentTradeStylePlan = null;
+
+    if (homeTradeStyleText != null) {
+        homeTradeStyleText.setText("TRADE STYLE • WAIT");
+        homeTradeStyleText.setTextColor(YELLOW);
+    }
+
+    if (homeConfidenceText != null) {
+        homeConfidenceText.setText("RULE-BASED CONFIDENCE • --");
+        homeConfidenceText.setTextColor(MUTED);
+    }
+
+    if (homeReviewTimeText != null) {
+        homeReviewTimeText.setText("SUGGESTED REVIEW • --");
+        homeReviewTimeText.setTextColor(MUTED);
+    }
+
+    if (homeStyleReasonText != null) {
+        homeStyleReasonText.setText(
+                "Waiting for confirmed timeframe agreement.");
+        homeStyleReasonText.setTextColor(MUTED);
+    }
+
+    if (tradeStyleText != null) {
+        tradeStyleText.setText("TRADE STYLE                  WAIT");
+        tradeStyleText.setTextColor(YELLOW);
+    }
+
+    if (confidenceText != null) {
+        confidenceText.setText("RULE-BASED CONFIDENCE       --");
+        confidenceText.setTextColor(MUTED);
+    }
+
+    if (reviewTimeText != null) {
+        reviewTimeText.setText("SUGGESTED REVIEW             --");
+        reviewTimeText.setTextColor(MUTED);
+    }
+
+    if (styleReasonText != null) {
+        styleReasonText.setText(
+                "Waiting for confirmed timeframe agreement.");
+        styleReasonText.setTextColor(MUTED);
+    }
+}
+
     private void resetForNewSelection() {
         mtfScanning = false;
         pendingPrimarySignal = null;
