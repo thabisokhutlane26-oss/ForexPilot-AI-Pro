@@ -26,6 +26,7 @@ import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.Spinner;
 import android.widget.TextView;
+
 import android.widget.Toast;
 
 import java.text.SimpleDateFormat;
@@ -96,6 +97,10 @@ public class MainActivity extends Activity {
 
     private Spinner marketSpinner, timeframeSpinner;
     private Button scanButton, themeButton;
+
+    private SignalHistoryStore signalHistoryStore;
+    private LinearLayout marketWatchBody, signalHistoryBody;
+    private String lastSavedHistoryKey = "";
 
     private Button candlesButton, lineButton, barsButton;
     private Button colorsButton;
@@ -182,6 +187,8 @@ public class MainActivity extends Activity {
                 getSharedPreferences(CHART_PREFS, MODE_PRIVATE);
 
         lightMode = preferences.getBoolean("light_mode", false);
+
+        signalHistoryStore = new SignalHistoryStore(this);
 
         chartMode = chartPreferences.getInt(
                 "chart_mode",
@@ -286,14 +293,16 @@ public class MainActivity extends Activity {
         root.addView(pageContainer, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f));
 
-        appPages = new View[5];
-        navigationButtons = new Button[5];
+        appPages = new View[7];
+        navigationButtons = new Button[3];
 
         LinearLayout home = createPage(0);
         LinearLayout charts = createPage(1);
         LinearLayout analysis = createPage(2);
         LinearLayout trade = createPage(3);
         LinearLayout settings = createPage(4);
+        LinearLayout marketWatch = createPage(5);
+        LinearLayout signalHistory = createPage(6);
 
         // HOME
         LinearLayout clockCard = createCard();
@@ -460,6 +469,7 @@ public class MainActivity extends Activity {
         charts.addView(chartInfo, params(8));
 
         // MARKET ANALYSIS
+        addSettingsBackButton(analysis, "MARKET ANALYSIS");
         LinearLayout analysisCard = createCard();
         analysisCard.addView(createText(
                 "MARKET ANALYSIS", 19, WHITE, true));
@@ -508,6 +518,7 @@ public class MainActivity extends Activity {
         analysis.addView(mtfCard, params(8));
 
         // TRADE PLAN
+        addSettingsBackButton(trade, "TRADE PLAN");
         LinearLayout tradeCard = createCard();
         tradeCard.addView(createText("TRADE PLAN", 21, WHITE, true));
         tradeCard.addView(createText(
@@ -544,6 +555,40 @@ public class MainActivity extends Activity {
         tradeScan.setOnClickListener(v -> requestCurrentSignal());
         tradeCard.addView(tradeScan, params(12));
         trade.addView(tradeCard, params(8));
+
+        // SETTINGS HUB
+        LinearLayout hubCard = createCard();
+        hubCard.addView(createText("SETTINGS HUB", 19, WHITE, true));
+        hubCard.addView(createText(
+                "Open your tools and manage your trading workspace.",
+                12, MUTED, false), params(4));
+
+        Button marketWatchButton = createButton("MARKET WATCH  →");
+        marketWatchButton.setOnClickListener(v -> {
+            showPage(5);
+            loadMarketWatch();
+        });
+        hubCard.addView(marketWatchButton, params(8));
+
+        Button historyButton = createButton("SIGNAL HISTORY  →");
+        historyButton.setOnClickListener(v -> {
+            showPage(6);
+            loadSignalHistory();
+        });
+        hubCard.addView(historyButton, params(7));
+
+        Button analysisButton = createButton("MARKET ANALYSIS  →");
+        analysisButton.setOnClickListener(v -> showPage(2));
+        hubCard.addView(analysisButton, params(7));
+
+        Button tradePlanButton = createButton("TRADE PLAN  →");
+        tradePlanButton.setOnClickListener(v -> showPage(3));
+        hubCard.addView(tradePlanButton, params(7));
+
+        Button chartColorsButton = createButton("CHART COLORS  →");
+        chartColorsButton.setOnClickListener(v -> showChartColors());
+        hubCard.addView(chartColorsButton, params(7));
+        settings.addView(hubCard, params(8));
 
         // SETTINGS
         LinearLayout appearanceCard = createCard();
@@ -599,6 +644,24 @@ public class MainActivity extends Activity {
                 13, MUTED, false), params(6));
         settings.addView(aboutCard, params(8));
 
+        // MARKET WATCH SUBPAGE
+        addSettingsBackButton(marketWatch, "MARKET WATCH");
+        marketWatchBody = new LinearLayout(this);
+        marketWatchBody.setOrientation(LinearLayout.VERTICAL);
+        marketWatch.addView(marketWatchBody, params(8));
+        marketWatchBody.addView(createText(
+                "Open Market Watch to load live market structure.",
+                13, MUTED, false));
+
+        // SIGNAL HISTORY SUBPAGE
+        addSettingsBackButton(signalHistory, "SIGNAL HISTORY");
+        signalHistoryBody = new LinearLayout(this);
+        signalHistoryBody.setOrientation(LinearLayout.VERTICAL);
+        signalHistory.addView(signalHistoryBody, params(8));
+        signalHistoryBody.addView(createText(
+                "Confirmed signals will appear here.",
+                13, MUTED, false));
+
         // BOTTOM NAVIGATION
         LinearLayout nav = new LinearLayout(this);
         nav.setOrientation(LinearLayout.HORIZONTAL);
@@ -606,8 +669,7 @@ public class MainActivity extends Activity {
         nav.setBackgroundColor(CARD);
 
         String[] labels = {
-                "⌂\nHOME", "▥\nCHARTS", "◈\nANALYSIS",
-                "⇄\nTRADE", "⚙\nSETTINGS"
+                "⌂\nHOME", "▥\nCHARTS", "⚙\nSETTINGS"
         };
 
         for (int i = 0; i < labels.length; i++) {
@@ -666,6 +728,8 @@ public class MainActivity extends Activity {
 
         resetTradeStyleDisplay();
         showPage(currentPage);
+        if (currentPage == 5) loadMarketWatch();
+        if (currentPage == 6) loadSignalHistory();
         updateChartModeButtons();
         applyAllChartSettings();
     }
@@ -713,7 +777,7 @@ public class MainActivity extends Activity {
         background.setColor(
                 selected ? BUTTON_BACKGROUND : FIELD_BACKGROUND);
         background.setStroke(
-                dp(1), selected ? BLUE : CARD_BORDER);
+                dp(1), selected ? BLUE : CARD_BORDER); 
 
         button.setBackground(background);
         button.setTextColor(selected ? Color.WHITE : MUTED);
@@ -859,18 +923,80 @@ public class MainActivity extends Activity {
                 0, Math.min(index, appPages.length - 1));
 
         for (int i = 0; i < appPages.length; i++) {
-            appPages[i].setVisibility(
-                    i == currentPage ? View.VISIBLE : View.GONE);
+            if (appPages[i] != null) {
+                appPages[i].setVisibility(
+                        i == currentPage ? View.VISIBLE : View.GONE);
+            }
+        }
+
+        int activeNavigation = currentPage == 0 ? 0
+                : currentPage == 1 ? 1 : 2;
+
+        for (int i = 0; i < navigationButtons.length; i++) {
+            Button button = navigationButtons[i];
+            if (button == null) continue;
 
             GradientDrawable background = new GradientDrawable();
             background.setCornerRadius(dp(10));
             background.setColor(
-                    i == currentPage ? BUTTON_BACKGROUND : CARD);
+                    i == activeNavigation ? BUTTON_BACKGROUND : CARD);
 
-            navigationButtons[i].setBackground(background);
-            navigationButtons[i].setTextColor(
-                    i == currentPage ? Color.WHITE : MUTED);
+            button.setBackground(background);
+            button.setTextColor(
+                    i == activeNavigation ? Color.WHITE : MUTED);
         }
+    }
+
+    private void addSettingsBackButton(
+            LinearLayout page, String title) {
+        Button back = createButton("←  BACK TO SETTINGS");
+        back.setTextSize(11);
+        back.setOnClickListener(v -> showPage(4));
+        page.addView(back, params(5));
+        page.addView(createText(title, 19, WHITE, true), params(5));
+    }
+
+    private void loadMarketWatch() {
+        if (marketWatchBody == null) return;
+        marketWatchBody.removeAllViews();
+
+        if (marketDataProvider == null) {
+            marketWatchBody.addView(createText(
+                    "CONNECTING TO MARKET DATA... PLEASE WAIT.",
+                    13, YELLOW, true));
+            return;
+        }
+
+        MarketWatchView view = new MarketWatchView(
+                this,
+                marketDataProvider,
+                symbol -> {
+                    selectedMarket = symbol;
+                    if (marketSpinner != null) {
+                        marketSpinner.setSelection(indexOf(markets, symbol));
+                    }
+                    if (marketName != null) marketName.setText(symbol);
+                    resetForNewSelection();
+                    showPage(1);
+                });
+
+        marketWatchBody.addView(view,
+                new LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT));
+    }
+
+    private void loadSignalHistory() {
+        if (signalHistoryBody == null) return;
+        signalHistoryBody.removeAllViews();
+
+        SignalHistoryView view =
+                new SignalHistoryView(this, signalHistoryStore);
+
+        signalHistoryBody.addView(view,
+                new LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT));
     }
 
     private void updateThemeButtonText() {
@@ -887,6 +1013,7 @@ public class MainActivity extends Activity {
         }
         return 0;
     }
+
 
     // AUTOMATIC TRADE STYLE
 
@@ -969,52 +1096,6 @@ public class MainActivity extends Activity {
             styleReasonText.setText(plan.getReason()
                     + "\n\nReview time is a reminder to reassess the market, "
                     + "not a guaranteed exit time.");
-            styleReasonText.setTextColor(MUTED);
-        }
-    }
-
-    private void resetTradeStyleDisplay() {
-        currentTradeStylePlan = null;
-
-        if (homeTradeStyleText != null) {
-            homeTradeStyleText.setText("TRADE STYLE • WAIT");
-            homeTradeStyleText.setTextColor(YELLOW);
-        }
-
-        if (homeConfidenceText != null) {
-            homeConfidenceText.setText("RULE-BASED CONFIDENCE • --");
-            homeConfidenceText.setTextColor(MUTED);
-        }
-
-        if (homeReviewTimeText != null) {
-            homeReviewTimeText.setText("SUGGESTED REVIEW • --");
-            homeReviewTimeText.setTextColor(MUTED);
-        }
-
-        if (homeStyleReasonText != null) {
-            homeStyleReasonText.setText(
-                    "Waiting for confirmed timeframe agreement.");
-            homeStyleReasonText.setTextColor(MUTED);
-        }
-
-        if (tradeStyleText != null) {
-            tradeStyleText.setText("TRADE STYLE • WAIT");
-            tradeStyleText.setTextColor(YELLOW);
-        }
-
-        if (confidenceText != null) {
-            confidenceText.setText("RULE-BASED CONFIDENCE • --");
-            confidenceText.setTextColor(MUTED);
-        }
-
-        if (reviewTimeText != null) {
-            reviewTimeText.setText("SUGGESTED REVIEW • --");
-            reviewTimeText.setTextColor(MUTED);
-        }
-
-        if (styleReasonText != null) {
-            styleReasonText.setText(
-                    "Waiting for confirmed timeframe agreement.");
             styleReasonText.setTextColor(MUTED);
         }
     }
@@ -1397,6 +1478,7 @@ public class MainActivity extends Activity {
         }
     }
 
+
     private void requestChartCandles() {
         if (marketDataProvider == null) return;
 
@@ -1712,9 +1794,21 @@ public class MainActivity extends Activity {
                     "● MTF CONFIRMED • " + mtf.name()
                             + " • STRENGTH "
                             + confluence.getStrength());
+
+
             connectionStatus.setTextColor(color);
 
             updateTradeStyleDisplay(plan);
+
+            String historyKey = pendingPrimarySignal.getSymbol()
+                    + "|" + pendingPrimarySignal.getTimeframe()
+                    + "|" + pendingPrimarySignal.getDirection().name()
+                    + "|" + pendingPrimarySignal.getEntry();
+            if (signalHistoryStore != null
+                    && !historyKey.equals(lastSavedHistoryKey)) {
+                signalHistoryStore.save(pendingPrimarySignal);
+                lastSavedHistoryKey = historyKey;
+            }
 
             if (forexChartView != null) {
                 forexChartView.setTradeLevels(
@@ -1768,7 +1862,6 @@ public class MainActivity extends Activity {
     }
 
     private void resetMtfDisplay() {
-
         setMtfBox(mtf5mText, "5M", Signal.Direction.WAIT);
         setMtfBox(mtf15mText, "15M", Signal.Direction.WAIT);
         setMtfBox(mtf30mText, "30M", Signal.Direction.WAIT);
@@ -1786,7 +1879,6 @@ public class MainActivity extends Activity {
     private void updateMtfBox(
             String timeframe,
             MultiTimeframeEngine.TimeframeResult result) {
-
         if (result != null) {
             setMtfBox(
                     getMtfTextView(timeframe),
@@ -1808,14 +1900,12 @@ public class MainActivity extends Activity {
             TextView view,
             String timeframe,
             Signal.Direction direction) {
-
         if (view == null) return;
 
         String label = direction == null
                 ? "WAIT" : direction.name();
 
         view.setText(timeframe + "\n" + label);
-
         view.setTextColor(
                 direction == Signal.Direction.BUY ? GREEN
                 : direction == Signal.Direction.SELL ? RED
@@ -1938,7 +2028,6 @@ public class MainActivity extends Activity {
         if (strokeColor != 0) {
             background.setStroke(dp(1), strokeColor);
         }
-
         return background;
     }
 
@@ -1960,6 +2049,7 @@ public class MainActivity extends Activity {
         p.setMargins(dp(4), 0, dp(4), 0);
         return p;
     }
+
 
     // REQUIRED MISSING HELPERS
 
@@ -2126,6 +2216,7 @@ public class MainActivity extends Activity {
         }
     }
 
+
     // FULL-SCREEN LANDSCAPE CHART
 
     private void enterFullscreenChart() {
@@ -2272,6 +2363,17 @@ public class MainActivity extends Activity {
             return;
         }
 
+        if (currentPage == 2 || currentPage == 3
+                || currentPage == 5 || currentPage == 6) {
+            showPage(4);
+            return;
+        }
+
+        if (currentPage != 0) {
+            showPage(0);
+            return;
+        }
+
         super.onBackPressed();
     }
 
@@ -2299,3 +2401,6 @@ public class MainActivity extends Activity {
         super.onDestroy();
     }
 }
+
+
+            
